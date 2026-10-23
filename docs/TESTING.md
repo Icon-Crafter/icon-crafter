@@ -187,4 +187,18 @@ style from a rectangle, apply it to another rectangle (fill shows the style bind
 colour variable and switch active mode (canvas previews the new value). Deleting an in-use
 style must raise a validation report rather than silently clearing references.
 
+## Session 8 verification — renderer fidelity (booleans + drop shadows)
+
+```powershell
+cargo test -p dp-render --no-default-features   # 20 passed (6 unit + 14 integration)
+cargo clippy -p dp-render --no-default-features --all-targets -- -D warnings
+# Full regression expected: 44 + 72 + 13 + 12 + 20 + 9 + 13 + 22 + 19 + 18 + 14 = 256 passed.
+```
+
+Visual checks: draw two overlapping rectangles, boolean-subtract them (canvas shows the cut
+outline, layers keep both operands), add a drop shadow via the inspector once effect editing
+lands (`Effect::drop_shadow`) and confirm the shadow follows the shape with a soft edge at
+1x/2x zoom. Confirm the warnings panel lists unsupported effects (inner shadow, layer blur,
+background blur) instead of silently dropping them.
+
 

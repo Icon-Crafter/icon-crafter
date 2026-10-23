@@ -22,7 +22,8 @@ pub mod viewport;
 pub use builder::{BuildError, SceneBuilder};
 pub use rasterize::{MAX_TARGET_EDGE, RenderError, RenderTarget, rasterize};
 pub use scene::{
-    DisplayList, SceneFill, SceneItem, ScenePaint, SceneShape, SceneStop, SceneStroke, SceneText,
+    DisplayList, SceneFill, SceneItem, ScenePaint, SceneShadow, SceneShape, SceneStop, SceneStroke,
+    SceneText,
 };
 pub use viewport::{MAX_ZOOM, MIN_ZOOM, Viewport};
 

@@ -17,7 +17,8 @@ use dp_model::{
 use dp_text::TextEngine;
 
 use crate::scene::{
-    DisplayList, SceneFill, SceneItem, ScenePaint, SceneShape, SceneStop, SceneStroke, SceneText,
+    DisplayList, SceneFill, SceneItem, ScenePaint, SceneShape, SceneShadow, SceneStop, SceneStroke,
+    SceneText,
 };
 
 /// Resolves a document page into a [`DisplayList`].
@@ -157,9 +158,11 @@ impl Builder<'_> {
             }
         }
 
+        let mut covered_by_boolean = false;
         if !culled
             && let Some(item) = self.make_item(node, matrix, local, world_bounds, clip, opacity)
         {
+            covered_by_boolean = node.kind == NodeKind::Boolean;
             self.list.items.push(item);
         }
 
@@ -168,7 +171,7 @@ impl Builder<'_> {
         } else {
             parent_clip
         };
-        if let Some(children) = self.page.children(id) {
+        if !covered_by_boolean && let Some(children) = self.page.children(id) {
             for child in children {
                 self.visit(*child, child_clip, opacity);
             }
@@ -269,6 +272,71 @@ impl Builder<'_> {
         }
     }
 
+    /// Evaluates a boolean node into one vector path in the node's local space.
+    ///
+    /// Operands are the node's visible children: the first child is the base and
+    /// the remaining children are folded with the node's operation. Curves are
+    /// flattened at the geometry crate's default tolerance, so the rendered
+    /// outline is polygonal (documented limitation); the document keeps the
+    /// original editable operand geometry.
+    fn boolean_path(&mut self, node: &Node) -> Option<VectorPath> {
+        let (operation, fill_rule) = match node.geometry {
+            Some(dp_model::NodeGeometry::Boolean {
+                operation,
+                fill_rule,
+            }) => (operation, fill_rule),
+            _ => {
+                self.list
+                    .warn("boolean node has no boolean geometry; drawing operands instead");
+                return None;
+            }
+        };
+        let geometry_rule: GeomFillRule = fill_rule.into();
+        let mut result: Option<VectorPath> = None;
+        for child_id in &node.children {
+            let Some(child) = self.page.get(*child_id) else {
+                self.list
+                    .warn("boolean operand is missing from the page; drawing no boolean path");
+                return None;
+            };
+            if !child.visible {
+                continue;
+            }
+            let Some(mut path) = outline_path(child) else {
+                self.list.warn(
+                    "boolean operand kind is not supported by the CPU renderer yet; drawing operands instead",
+                );
+                return None;
+            };
+            path.transform(&child.transform.matrix());
+            result = Some(match result {
+                None => path,
+                Some(accumulated) => {
+                    match dp_geom::boolean_op(
+                        &accumulated,
+                        &path,
+                        operation,
+                        geometry_rule,
+                    ) {
+                        Ok(combined) => combined,
+                        Err(_) => {
+                            self.list.warn(
+                                "boolean operation failed on non-finite geometry; drawing operands instead",
+                            );
+                            return None;
+                        }
+                    }
+                }
+            });
+        }
+        if result.as_ref().is_none_or(VectorPath::is_empty) {
+            self.list
+                .warn("boolean node has no visible operands; nothing was rendered");
+            return None;
+        }
+        result
+    }
+
     fn make_item(
         &mut self,
         node: &Node,
@@ -360,11 +428,12 @@ impl Builder<'_> {
                 fills = self.resolve_fills(&node.style, opacity, size);
                 strokes = self.resolve_strokes(&node.style, size);
             }
-            NodeKind::Boolean => {
-                self.list.warn(
-                    "boolean nodes render their operand children; evaluated boolean geometry is not rasterized yet",
-                );
-            }
+            NodeKind::Boolean => match self.boolean_path(node) {
+                Some(path) => shape = SceneShape::Path(Arc::new(path)),
+                None => self.list.warn(
+                    "boolean node could not be evaluated; its operand children are drawn instead",
+                ),
+            },
             NodeKind::Image => {
                 self.list
                     .warn("image fills are not rendered by the CPU renderer yet");
@@ -385,14 +454,49 @@ impl Builder<'_> {
                 | NodeKind::Polygon
                 | NodeKind::Star
                 | NodeKind::Vector
+                | NodeKind::Boolean
         ) {
             fills = self.resolve_fills(&node.style, opacity, size);
             strokes = self.resolve_strokes(&node.style, size);
         }
 
-        if !node.style.effects.is_empty() {
+        let mut shadows = Vec::new();
+        for effect in &node.style.effects {
+            match effect {
+                dp_model::Effect::DropShadow {
+                    color,
+                    offset,
+                    blur,
+                    spread,
+                    blend,
+                } => {
+                    if color.a > 0.0 && blur.is_finite() {
+                        shadows.push(SceneShadow {
+                            color: *color,
+                            offset: *offset,
+                            blur: blur.max(0.0),
+                            spread: spread.max(0.0),
+                            blend: *blend,
+                        });
+                    }
+                }
+                dp_model::Effect::InnerShadow { .. } => {
+                    self.list
+                        .warn("inner shadows are not rendered by the CPU renderer yet");
+                }
+                dp_model::Effect::LayerBlur { .. } => {
+                    self.list
+                        .warn("layer blur is not rendered by the CPU renderer yet");
+                }
+                dp_model::Effect::BackgroundBlur { .. } => {
+                    self.list
+                        .warn("background blur is not rendered by the CPU renderer yet");
+                }
+            }
+        }
+        if !shadows.is_empty() && text_payload.is_some() {
             self.list
-                .warn("layer effects (shadows/blur) are not rendered by the CPU renderer yet");
+                .warn("text drop shadows are not rendered yet (shape shadows are)");
         }
         if !node.style.inset_stroke
             && node
@@ -417,6 +521,7 @@ impl Builder<'_> {
             opacity,
             blend: node.blend,
             shape,
+            shadows,
             fills,
             strokes,
             text: text_payload,
@@ -606,6 +711,45 @@ fn rectangle_path(node: &Node) -> VectorPath {
         Size::new(node.transform.w.max(0.0), node.transform.h.max(0.0)),
         node.style.corner_radii,
     )
+}
+
+/// Outline of a shape node in its own local coordinates (used by boolean
+/// evaluation). Returns `None` for nodes without a usable outline.
+fn outline_path(node: &Node) -> Option<VectorPath> {
+    let size = Size::new(node.transform.w.max(0.0), node.transform.h.max(0.0));
+    match node.kind {
+        NodeKind::Rectangle
+        | NodeKind::Frame
+        | NodeKind::Group
+        | NodeKind::Component
+        | NodeKind::ComponentSet
+        | NodeKind::Instance
+        | NodeKind::Slice => Some(rectangle_path(node)),
+        NodeKind::Ellipse => Some(dp_geom::shapes::ellipse_path(size)),
+        NodeKind::Line => Some(dp_geom::shapes::line_path(size)),
+        NodeKind::Polygon => {
+            let points = match node.geometry {
+                Some(dp_model::NodeGeometry::Polygon { point_count }) => point_count,
+                _ => 3,
+            };
+            Some(dp_geom::shapes::polygon_path(size, points))
+        }
+        NodeKind::Star => {
+            let (points, inner) = match node.geometry {
+                Some(dp_model::NodeGeometry::Star {
+                    point_count,
+                    inner_ratio,
+                }) => (point_count, inner_ratio),
+                _ => (5, 0.38),
+            };
+            Some(dp_geom::shapes::star_path(size, points, inner))
+        }
+        NodeKind::Vector => match &node.geometry {
+            Some(dp_model::NodeGeometry::Vector { path }) => Some(path.clone()),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 fn has_paint(style: &NodeStyle) -> bool {

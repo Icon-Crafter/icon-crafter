@@ -251,7 +251,12 @@ Full protocol in [COLLAB-PROTOCOL.md](COLLAB-PROTOCOL.md).
   Until integrated, the editor is single-user with autosave.
 * Boolean operations flatten curves to polylines before exact boolean and emit polygonal
   results (curves within tolerance are lost). Documented in `dp-geom::boolean` and tested;
-  exact curve-boolean is a future upgrade.
+  exact curve-boolean is a future upgrade. The CPU renderer now evaluates boolean children
+  into one path for display while the document keeps the editable operands.
+* Drop shadows are rasterized as an offset, triple-box-blurred copy of the shape outline
+  (spread expanded with a stroke) — an approximation of the vector shadow, not an exact
+  gaussian. Inner shadows, layer blur, background blur and text shadows are not rendered yet;
+  the scene builder emits explicit warnings for them instead of silently drawing nothing.
 * wgpu backend is behind a feature flag and must prove pixel parity with the CPU path
   before it becomes the default; measurements will decide.
 * Plugins use a declaration-validated, op-scoped sandbox in Rust rather than arbitrary

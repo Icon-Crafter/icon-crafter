@@ -49,14 +49,15 @@ Last updated: session 7 (design-system engine authoring: components, instances, 
 | E9 | Group/ungroup, reorder, z-order commands, lock/hide | implemented | ops layer + command table; editor tests |
 | E10 | Layers panel with tree, rename, drag reorder, search | in-progress | engine summary + rename/visibility/lock commands; UI panel milestone 2 |
 | E11 | Pages management | implemented | `add_page`/`rename_page`/`delete_page`/`set_active_page` + editor test |
-| E12 | Property inspector: transform, size, rotation, opacity, blend, fills, strokes, effects, corner radii | in-progress | engine `apply_patch`/opacity/text props implemented; UI inspector milestone 2 |
+| E12 | Property inspector: transform, size, rotation, opacity, blend, fills, strokes, effects, corner radii | in-progress | engine `apply_patch`/opacity/text props implemented; UI inspector milestone 2; inspector effects fields pending |
 | E13 | Undo/redo with coalescing | verified | `History` coalescing + editor tests (drag undo, delete undo, text commit undo) |
 | E14 | Rulers, guides, grid, snap lines | limited | snapping + snap-line overlay in engine; rulers/guides UI pending |
 | E15 | Save/reopen native `.icraft` + JSON, autosave journal, crash recovery | implemented | `save_and_reopen_roundtrip` test; recovery journal in dp-persist; recovery prompt UI pending |
-| E16 | PNG/SVG export with scale/transparent/selection options | implemented | `png_and_svg_export_produce_files` test; PDF also; transparent flag documented as not yet honoured |
+| E16 | PNG/SVG export with scale/transparent/selection options | implemented | `png_and_svg_export_produce_files` test; transparent PNG + selection scope honoured by the scoped exporters; PDF also |
 | E17 | Command palette + customizable shortcuts + context menus + tooltips | in-progress | shell exists (apps/ui); build fix + real wiring in milestone 2 |
 | E18 | Selection toolbar (align, distribute, boolean, opacity, group) | in-progress | engine commands implemented + tested; UI toolbar milestone 2 |
 | E19 | Responsive to large documents (tile cache, culling, benchmarked) | limited | viewport culling + layout/text caches implemented; tile cache and benchmarks not yet |
+| E20 | Booleans rendered as evaluated geometry; drop shadows rasterized | implemented | renderer evaluates boolean children (flattened, polygonal) and rasterizes offset blurred shape shadows; tests `boolean_subtract_renders_evaluated_geometry`, `boolean_union_merges_operand_outlines`, `drop_shadows_are_rasterized_behind_shapes`; inner shadows / layer / background blur still warned |
 
 ## Vector editing (Phase 4)
 
@@ -64,7 +65,7 @@ Last updated: session 7 (design-system engine authoring: components, instances, 
 |---|---|---|---|
 | V1 | Bézier pen tool with handle editing, add/remove/convert anchors | planned | |
 | V2 | Multiple contours, open/closed, join/split | planned | |
-| V3 | Boolean union/subtract/intersect/exclude (curves flattened → polygonal, documented) | planned | |
+| V3 | Boolean union/subtract/intersect/exclude (curves flattened → polygonal, documented) | implemented | `dp-geom::boolean` + editor `boolean` command + renderer evaluates operand children into one path (`boolean_subtract_renders_evaluated_geometry`, `boolean_union_merges_operand_outlines`); operands stay editable children; UI booleans via selection toolbar (E18) |
 | V4 | Stroke alignment/cap/join/dash controls | planned | |
 | V5 | Shape builder equivalent | planned | |
 | V6 | Text on path | planned | |

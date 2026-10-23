@@ -203,6 +203,9 @@ fn draw_item(
     if let SceneShape::Path(path) = &item.shape
         && let Some(tiny_path) = to_tiny_path(path)
     {
+        for shadow in &item.shadows {
+            draw_shadow(target, item, shadow, &tiny_path, viewport_transform, mask);
+        }
         for fill in &item.fills {
             if let Some(shader) = to_shader(&fill.paint, fill.opacity) {
                 let paint = TinyPaint {
@@ -424,6 +427,190 @@ fn clip_mask(screen: &Rect, width: u32, height: u32) -> Option<Mask> {
         Transform::identity(),
     );
     Some(mask)
+}
+
+/// Draws one drop shadow for an item: an offset, optionally blurred copy of the
+/// outline filled with the shadow colour. Spread is approximated with an outline
+/// stroke; text shadows and inner/background blurs are not implemented yet and
+/// are warned by the builder.
+#[allow(clippy::too_many_arguments)]
+fn draw_shadow(
+    target: &mut Pixmap,
+    item: &SceneItem,
+    shadow: &crate::scene::SceneShadow,
+    path: &Path,
+    viewport_transform: Transform,
+    mask: Option<&Mask>,
+) {
+    let full = viewport_transform.pre_concat(to_tiny_transform(item.matrix));
+    let scale = (full.sx * full.sx + full.ky * full.ky).sqrt().max(0.001);
+    let expand = shadow.blur + shadow.spread + 2.0;
+    let world = Rect::new(
+        item.world_bounds.x + shadow.offset.x - expand,
+        item.world_bounds.y + shadow.offset.y - expand,
+        item.world_bounds.w + expand * 2.0,
+        item.world_bounds.h + expand * 2.0,
+    );
+    let (min_x, min_y, max_x, max_y) = map_rect(viewport_transform, world);
+    let left = min_x.floor().max(0.0);
+    let top = min_y.floor().max(0.0);
+    let right = max_x.ceil().min(target.width() as f32);
+    let bottom = max_y.ceil().min(target.height() as f32);
+    let width = (right - left).max(0.0) as u32;
+    let height = (bottom - top).max(0.0) as u32;
+    if width == 0 || height == 0 || (width as u64 * height as u64) > 16_000_000 {
+        return;
+    }
+    let Some(mut shadow_pixmap) = Pixmap::new(width, height) else {
+        return;
+    };
+    let offset = Transform::from_translate(
+        (shadow.offset.x * scale as f64) as f32,
+        (shadow.offset.y * scale as f64) as f32,
+    );
+    let local = Transform::from_translate(-left, -top)
+        .pre_concat(offset)
+        .pre_concat(full);
+    let paint = TinyPaint {
+        shader: Shader::SolidColor(to_tiny_color(shadow.color, item.opacity)),
+        anti_alias: true,
+        ..TinyPaint::default()
+    };
+    shadow_pixmap.fill_path(path, &paint, TinyFillRule::Winding, local, None);
+    if shadow.spread > 0.5 {
+        let spread_stroke = TinyStroke {
+            width: (shadow.spread * scale as f64) as f32 * 2.0,
+            ..TinyStroke::default()
+        };
+        shadow_pixmap.stroke_path(path, &paint, &spread_stroke, local, None);
+    }
+    let blur_radius = (shadow.blur as f32 * scale).round() as u32;
+    if blur_radius >= 1 {
+        blur_rgba(
+            shadow_pixmap.data_mut(),
+            width as usize,
+            height as usize,
+            blur_radius.min(128),
+        );
+    }
+    let Some(source) = PixmapRef::from_bytes(shadow_pixmap.data(), width, height) else {
+        return;
+    };
+    let pixmap_paint = PixmapPaint {
+        opacity: 1.0,
+        blend_mode: to_tiny_blend(shadow.blend),
+        quality: FilterQuality::Bilinear,
+    };
+    target.draw_pixmap(
+        left as i32,
+        top as i32,
+        source,
+        &pixmap_paint,
+        Transform::identity(),
+        mask,
+    );
+}
+
+/// Axis-aligned device rectangle (min_x, min_y, max_x, max_y) for a world rect.
+fn map_rect(transform: Transform, rect: Rect) -> (f32, f32, f32, f32) {
+    let corners = [
+        (rect.x, rect.y),
+        (rect.right(), rect.y),
+        (rect.right(), rect.bottom()),
+        (rect.x, rect.bottom()),
+    ];
+    let mut min_x = f32::MAX;
+    let mut min_y = f32::MAX;
+    let mut max_x = f32::MIN;
+    let mut max_y = f32::MIN;
+    for (x, y) in corners {
+        let mut point = tiny_skia::Point::from_xy(x as f32, y as f32);
+        transform.map_point(&mut point);
+        min_x = min_x.min(point.x);
+        min_y = min_y.min(point.y);
+        max_x = max_x.max(point.x);
+        max_y = max_y.max(point.y);
+    }
+    (min_x, min_y, max_x, max_y)
+}
+
+/// Separable triple box blur over premultiplied RGBA8 (approximates a gaussian).
+fn blur_rgba(data: &mut [u8], width: usize, height: usize, radius: u32) {
+    if width < 2 || height < 2 || radius == 0 {
+        return;
+    }
+    let radius = radius as usize;
+    let mut scratch = vec![0u8; data.len()];
+    for _ in 0..3 {
+        box_blur_horizontal(data, &mut scratch, width, height, radius);
+        box_blur_vertical(&scratch, data, width, height, radius);
+    }
+}
+
+fn box_blur_horizontal(
+    source: &[u8],
+    destination: &mut [u8],
+    width: usize,
+    height: usize,
+    radius: usize,
+) {
+    let window = (radius * 2 + 1) as u32;
+    for y in 0..height {
+        let row = y * width * 4;
+        let mut sums = [0u32; 4];
+        for x in 0..=(radius.min(width - 1)) {
+            let idx = row + x * 4;
+            for c in 0..4 {
+                sums[c] += source[idx + c] as u32;
+            }
+        }
+        for x in 0..width {
+            let out = row + x * 4;
+            for c in 0..4 {
+                destination[out + c] = (sums[c] / window) as u8;
+            }
+            let add_x = (x + radius + 1).min(width - 1);
+            let remove_x = x.saturating_sub(radius);
+            let add = row + add_x * 4;
+            let remove = row + remove_x * 4;
+            for c in 0..4 {
+                sums[c] = sums[c] + source[add + c] as u32 - source[remove + c] as u32;
+            }
+        }
+    }
+}
+
+fn box_blur_vertical(
+    source: &[u8],
+    destination: &mut [u8],
+    width: usize,
+    height: usize,
+    radius: usize,
+) {
+    let window = (radius * 2 + 1) as u32;
+    for x in 0..width {
+        let column = x * 4;
+        let mut sums = [0u32; 4];
+        for y in 0..=(radius.min(height - 1)) {
+            let idx = y * width * 4 + column;
+            for c in 0..4 {
+                sums[c] += source[idx + c] as u32;
+            }
+        }
+        for y in 0..height {
+            let out = y * width * 4 + column;
+            for c in 0..4 {
+                destination[out + c] = (sums[c] / window) as u8;
+            }
+            let add_y = (y + radius + 1).min(height - 1);
+            let remove_y = y.saturating_sub(radius);
+            let add = add_y * width * 4 + column;
+            let remove = remove_y * width * 4 + column;
+            for c in 0..4 {
+                sums[c] = sums[c] + source[add + c] as u32 - source[remove + c] as u32;
+            }
+        }
+    }
 }
 
 fn to_tiny_transform(matrix: Mat2D) -> Transform {

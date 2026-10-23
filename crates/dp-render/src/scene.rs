@@ -95,6 +95,21 @@ pub enum SceneShape {
     Empty,
 }
 
+/// A resolved drop shadow (document units; rasterizer scales by viewport).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SceneShadow {
+    /// Shadow colour (alpha matters).
+    pub color: Color,
+    /// Offset in document units.
+    pub offset: Point,
+    /// Blur radius in document units.
+    pub blur: f64,
+    /// Spread (outline grow) in document units.
+    pub spread: f64,
+    /// Blend mode.
+    pub blend: BlendMode,
+}
+
 /// One drawable item in paint order (back to front).
 #[derive(Debug, Clone)]
 pub struct SceneItem {
@@ -112,6 +127,8 @@ pub struct SceneItem {
     pub blend: BlendMode,
     /// Shape.
     pub shape: SceneShape,
+    /// Drop shadows drawn behind the item, in order.
+    pub shadows: Vec<SceneShadow>,
     /// Fills, painted in order.
     pub fills: Vec<SceneFill>,
     /// Strokes, painted after fills.

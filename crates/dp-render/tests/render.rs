@@ -3,9 +3,10 @@
 //! These exercise the real pipeline: document model -> layout -> display list
 //! -> tiny-skia raster -> pixels. They are the visual regression baseline.
 
-use dp_geom::Size;
+use dp_geom::{Point, Size};
 use dp_model::{
-    Color, Document, Fill, Node, NodeId, NodeStyle, PageId, Paint, Stroke, StyleId, VariableId,
+    Color, Document, Fill, FillRule as ModelFillRule, Node, NodeGeometry, NodeId, NodeKind,
+    NodeStyle, PageId, Paint, Stroke, StyleId, Transform, VariableId,
 };
 use dp_render::{RenderTarget, SceneBuilder, Viewport, render_page_png};
 use dp_text::TextEngine;
@@ -273,4 +274,89 @@ fn layout_map_sizes_text_from_content() {
     assert!(measured.size.w > 0.0);
     assert!(measured.size.h > 0.0);
     assert_eq!(measured.size, Size::new(measured.size.w, measured.size.h));
+}
+
+fn boolean_document(operation: dp_geom::BooleanOp) -> (Document, PageId) {
+    let (mut document, page) = doc_and_page();
+    let mut node = Node::new(
+        NodeKind::Boolean,
+        "Boolean",
+        Transform::new(0.0, 0.0, 100.0, 100.0),
+    );
+    node.style = NodeStyle::filled(red());
+    node.geometry = Some(NodeGeometry::Boolean {
+        operation,
+        fill_rule: ModelFillRule::NonZero,
+    });
+    let boolean_id = add(&mut document, page, node, None);
+    add(
+        &mut document,
+        page,
+        Node::rectangle("A", 0.0, 0.0, 60.0, 60.0),
+        Some(boolean_id),
+    );
+    add(
+        &mut document,
+        page,
+        Node::rectangle("B", 40.0, 0.0, 60.0, 60.0),
+        Some(boolean_id),
+    );
+    (document, page)
+}
+
+#[test]
+fn boolean_subtract_renders_evaluated_geometry() {
+    let (document, page) = boolean_document(dp_geom::BooleanOp::Subtract);
+    let target = render(&document, page, &viewport(200.0, 100.0));
+    // A minus B: the left part of A survives, the overlap and B are gone.
+    let kept = target.pixel_straight(20, 30).expect("pixel inside A");
+    assert_eq!(&kept[..3], &[255, 0, 0]);
+    let removed = target
+        .pixel_straight(70, 30)
+        .expect("pixel inside B");
+    assert_eq!(removed[3], 0);
+    let below = target.pixel_straight(20, 80).expect("pixel below A");
+    assert_eq!(below[3], 0);
+}
+
+#[test]
+fn boolean_union_merges_operand_outlines() {
+    let (document, page) = boolean_document(dp_geom::BooleanOp::Union);
+    let target = render(&document, page, &viewport(200.0, 100.0));
+    let merged = target
+        .pixel_straight(70, 30)
+        .expect("pixel inside the union");
+    assert_eq!(&merged[..3], &[255, 0, 0]);
+    assert_eq!(merged[3], 255);
+}
+
+#[test]
+fn drop_shadows_are_rasterized_behind_shapes() {
+    let (mut document, page) = doc_and_page();
+    let mut style = NodeStyle::filled(red());
+    style.effects = vec![dp_model::Effect::drop_shadow(
+        Color::BLACK,
+        Point::new(10.0, 10.0),
+        6.0,
+    )];
+    add(
+        &mut document,
+        page,
+        Node::rectangle("Card", 20.0, 20.0, 60.0, 60.0).with_style(style),
+        None,
+    );
+    let target = render(&document, page, &viewport(200.0, 150.0));
+
+    let body = target.pixel_straight(50, 50).expect("shape pixel");
+    assert_eq!(&body[..3], &[255, 0, 0]);
+    assert_eq!(body[3], 255);
+
+    // Offset shadow: just outside the bottom-right edge there must be visible
+    // darkness, and far away the canvas must stay untouched.
+    let shadow = target.pixel_straight(85, 85).expect("shadow pixel");
+    assert!(shadow[3] > 0, "shadow alpha was {}", shadow[3]);
+    assert!(shadow[0] < 200, "shadow was not dark: {shadow:?}");
+
+    let untouched = target.pixel_straight(5, 5).expect("corner pixel");
+    assert_eq!(untouched[3], 0);
 }

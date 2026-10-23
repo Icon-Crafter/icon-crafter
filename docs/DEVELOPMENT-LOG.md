@@ -294,5 +294,23 @@ deleted `target/debug/incremental` (3.42 GB) while investigating.
   variables collections/modes) against these commands; then collaboration transport wiring
   (desktop ↔ Axum WS relay) and prototype UI.
 
+## Session 8 (2026-10-24) — Renderer fidelity: evaluated booleans + drop shadows
+
+- `dp-render` evaluates boolean nodes into real geometry: visible children are outlined,
+  transformed into the boolean node's local space, folded with the node's `BooleanOp` through
+  `dp_geom::boolean_op`, and drawn as one path; operand children stay editable in the document
+  and are not drawn twice. Unsupported operands (images/text/etc.) fall back to drawing the
+  operands with a warning. `cargo test -p dp-render` → 20 passed (6 unit + 14 integration,
+  new `boolean_subtract_renders_evaluated_geometry`, `boolean_union_merges_operand_outlines`).
+- Drop shadows are rasterized: the shape outline is filled with the shadow colour, offset by
+  the effect offset, optionally expanded with a stroke for spread, and blurred with a
+  separable triple box blur on premultiplied RGBA before being composited with the shadow
+  blend mode. New test `drop_shadows_are_rasterized_behind_shapes`. Remaining effect
+  limitations are explicit warnings: inner shadows, layer blur, background blur, text shadows.
+- Docs updated: FEATURE-CHECKLIST E12/E16/E20 + V3; ARCHITECTURE §8 trade-offs; TESTING
+  session 8 commands (expected 256 engine tests).
+- Next: design-system panels UI (frontend milestone 4 in flight), then collaboration transport.
+
+
 
 
