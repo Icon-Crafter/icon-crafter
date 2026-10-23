@@ -1783,6 +1783,7 @@ name = "dp-model"
 version = "0.1.0"
 dependencies = [
  "bitflags 2.13.2",
+ "chrono",
  "dp-geom",
  "indexmap 2.14.2",
  "serde",

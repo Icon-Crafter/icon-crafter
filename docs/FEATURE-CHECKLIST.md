@@ -1,0 +1,159 @@
+# Feature checklist
+
+Status legend: **planned** · **in-progress** · **implemented** (code exists, builds, unit
+tested) · **verified** (verified end-to-end in the running app) · **blocked** (with reason)
+· **limited** (implemented subset with documented limitation).
+
+Rule: a feature is never marked implemented/verified because a button exists. Each row
+names the verification evidence in the development log or a test.
+
+Last updated: session 1 (scaffold + architecture).
+
+## Foundation
+
+| # | Feature | Status | Evidence / notes |
+|---|---|---|---|
+| F1 | Rust workspace (14 members), pinned toolchain, shared profiles | verified | `cargo metadata --no-deps`, initial commit |
+| F2 | Tauri desktop shell + config + capabilities + icons | implemented | builds once UI exists; window not yet launched |
+| F3 | Axum backend skeleton | in-progress | routes land in backend phase |
+| F4 | Docker compose for Postgres/MinIO/Redis | planned | Docker is not installed on the dev host; documented gap |
+| F5 | Architecture, document format, collaboration protocol docs | implemented | `docs/ARCHITECTURE.md`, `DOCUMENT-FORMAT.md`, `COLLAB-PROTOCOL.md` |
+| F6 | Contract + design system docs | implemented | `docs/CONTRACT.md`, `DESIGN-SYSTEM.md` |
+| F7 | CI-ready commands documented (fmt/clippy/test/build) | implemented | `docs/TESTING.md`, root README |
+| F8 | Feature checklist / dev log / release checklist | implemented | this file + `DEVELOPMENT-LOG.md`, `RELEASE-CHECKLIST.md` |
+
+## Design editor — Phase 3 vertical slice
+
+| # | Feature | Status | Evidence / notes |
+|---|---|---|---|
+| E1 | Infinite canvas: zoom/pan (wheel, trackpad, space+drag, middle mouse) | planned | |
+| E2 | Zoom to selection / fit / 100% / selection info | planned | |
+| E3 | Frames, groups, rectangles, ellipses, lines, polygons, stars | planned | |
+| E4 | Text creation + on-canvas editing | planned | |
+| E5 | Vector paths + pen tool | planned | |
+| E6 | Selection: click, shift-click, marquee, deep select, lock/hide respect | planned | |
+| E7 | Move, resize with handles, rotate, nudge, snap to objects/grid/guides | planned | |
+| E8 | Copy/paste/duplicate/cut/clipboard | planned | |
+| E9 | Group/ungroup, reorder, z-order commands, lock/hide | planned | |
+| E10 | Layers panel with tree, rename, drag reorder, search | planned | |
+| E11 | Pages management | planned | |
+| E12 | Property inspector: transform, size, rotation, opacity, blend, fills, strokes, effects, corner radii | planned | |
+| E13 | Undo/redo with coalescing | planned | |
+| E14 | Rulers, guides, grid, snap lines | planned | |
+| E15 | Save/reopen native `.icraft` + JSON, autosave journal, crash recovery | planned | |
+| E16 | PNG/SVG export with scale/transparent/selection options | planned | |
+| E17 | Command palette + customizable shortcuts + context menus + tooltips | planned | |
+| E18 | Selection toolbar (align, distribute, boolean, opacity, group) | planned | |
+| E19 | Responsive to large documents (tile cache, culling, benchmarked) | planned | |
+
+## Vector editing (Phase 4)
+
+| # | Feature | Status | Evidence / notes |
+|---|---|---|---|
+| V1 | Bézier pen tool with handle editing, add/remove/convert anchors | planned | |
+| V2 | Multiple contours, open/closed, join/split | planned | |
+| V3 | Boolean union/subtract/intersect/exclude (curves flattened → polygonal, documented) | planned | |
+| V4 | Stroke alignment/cap/join/dash controls | planned | |
+| V5 | Shape builder equivalent | planned | |
+| V6 | Text on path | planned | |
+| V7 | SVG import/export round-trip of editable geometry | planned | |
+| V8 | Custom brushes / illustration workspace | planned | |
+
+## Typography (Phase 4)
+
+| # | Feature | Status | Evidence / notes |
+|---|---|---|---|
+| T1 | Font discovery/indexing, font loading, fallback + missing-font warnings | planned | |
+| T2 | Family/size/weight/style/line-height/letter-spacing controls | planned | |
+| T3 | Alignment, paragraph spacing, list controls, decoration, case | planned | |
+| T4 | Auto/fixed text box + overflow handling | planned | |
+| T5 | Shared text styles | planned | |
+| T6 | Reliable shaping/measurement (bidi, fallback), cached | planned | |
+
+## Auto layout (Phase 4)
+
+| # | Feature | Status | Evidence / notes |
+|---|---|---|---|
+| L1 | H/V layout, gap, padding, alignment | planned | |
+| L2 | Hug/fill/fixed, min/max, wrapping | planned | |
+| L3 | Nested layouts, layout-aware instances | planned | |
+| L4 | Constraints/anchors for non-auto-layout children | planned | |
+| L5 | Deterministic engine + unit tests for nested/complex cases | planned | |
+| L6 | Visual layout debugging | planned | |
+
+## Components & design systems (Phase 4)
+
+| # | Feature | Status | Evidence / notes |
+|---|---|---|---|
+| C1 | Create component/component set, instances, nested components | planned | |
+| C2 | Overrides (property/text/instance swap), detach, reset | planned | |
+| C3 | Variants + component properties | planned | |
+| C4 | Color/text/effect styles | planned | |
+| C5 | Variables, collections, modes, aliases, light/dark themes | planned | |
+| C6 | Libraries: publish/consume across files, update + conflict reports | planned | |
+| C7 | Broken-reference detection, usage reporting | planned | |
+
+## Prototyping (Phase 5)
+
+| # | Feature | Status | Evidence / notes |
+|---|---|---|---|
+| P1 | Interaction graph (frames/components), triggers click/hover/press/drag | planned | |
+| P2 | Actions: navigate, overlay open/close, scroll to, back | planned | |
+| P3 | Transitions: instant/dissolve/slide/smart animate, duration/easing/spring | planned | |
+| P4 | Variables + conditional logic, expressions, multiple actions | planned | |
+| P5 | Device/viewport presets, responsive preview, presentation mode, keyboard | planned | |
+| P6 | Shareable preview link (backend) | planned | |
+
+## Dev Mode (Phase 5)
+
+| # | Feature | Status | Evidence / notes |
+|---|---|---|---|
+| D1 | Inspect dimensions/spacing/constraints/colors/type/effects/components/variables | planned | |
+| D2 | Deterministic CSS / React+TS / SwiftUI / Compose generation | planned | |
+| D3 | Asset export panel + copy measurements/styles | planned | |
+| D4 | Annotations, ready-for-dev status, links to code/docs, revision compare | planned | |
+
+## Collaboration & backend (Phase 6)
+
+| # | Feature | Status | Evidence / notes |
+|---|---|---|---|
+| B1 | Accounts (register/login/logout), Argon2id, session tokens, secure cookies | planned | |
+| B2 | Teams/projects/files/folders, roles, invites, permissions (server enforced) | planned | |
+| B3 | Autosave + shares + link access controls + password-protected links | planned | |
+| B4 | Comments anchored to objects, threads, resolve, activity history | planned | |
+| B5 | WebSocket real-time sync (dp-collab), presence, cursors, reconnect replay | planned | |
+| B6 | Version snapshots + deltas, named versions, restore, compare, branches/merge | planned | |
+| B7 | S3-compatible storage (uploads, exports, assets) + local dev provider | planned | |
+| B8 | Rate limiting, audit log, migrations, backups guidance | planned | |
+| B9 | Shareable file/prototype links + public viewer page | planned | |
+
+## Additional workspaces (Phase 7)
+
+| # | Feature | Status | Evidence / notes |
+|---|---|---|---|
+| W1 | Whiteboard: sticky notes, shapes, connectors, freehand, tables, mind maps, voting, timer, templates, reactions | planned | |
+| W2 | Slides: creation/reorder, templates/themes, notes, transitions, present, PDF export | planned | |
+| W3 | Drawing/illustration: vector brushes, pressure, layers, texture/pattern fills, SVG/PNG/PDF export | planned | |
+| W4 | Website design: breakpoints, sections, content collections, responsive preview, HTML/CSS export | planned | |
+| W5 | Website publishing backend: actual deploy workflow, custom-domain config | planned | |
+
+## Platform features (Phase 7)
+
+| # | Feature | Status | Evidence / notes |
+|---|---|---|---|
+| X1 | AI subsystem: provider abstraction, validated op proposals, confirmation/undo, optional | planned | |
+| X2 | Plugin architecture: manifests, permissions, sandboxed ops, commands/panels, lifecycle, docs + examples | planned | |
+| X3 | Integrations: GitHub/issues/design APIs/AI tool hooks | planned | |
+| X4 | Import/export: SVG, PNG, JPEG, PDF, HTML/CSS, image import, clipboard | planned | |
+| X5 | PowerPoint subset import/export (documented) | planned | |
+
+## Quality & performance (Phase 8)
+
+| # | Feature | Status | Evidence / notes |
+|---|---|---|---|
+| Q1 | Unit + integration tests across crates and server | planned | |
+| Q2 | Benchmarks for large documents (10k nodes), reported numbers | planned | |
+| Q3 | Dependency audit, secret scan, security review | planned | |
+| Q4 | Installers (Windows MSI/NSIS), upgrade path, reproducibility | planned | |
+| Q5 | Accessibility pass (keyboard, focus, labels) | planned | |
+| Q6 | Offline/no-network operation for core editor | planned | |

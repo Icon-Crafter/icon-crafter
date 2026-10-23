@@ -1,0 +1,233 @@
+# Editor ⇄ engine contract (Tauri IPC)
+
+The React UI is a **presentation layer**. This document is the canonical contract between
+`apps/ui` (TypeScript) and the Rust engine (`apps/desktop`). Both sides must implement this
+exactly; changes are proposed to the Lead, who updates this document and the Rust side.
+The Rust types live in `apps/desktop/src/ipc.rs`; the TypeScript mirror in
+`apps/ui/src/engine/contract.ts`.
+
+All lengths are design pixels unless a name says otherwise (`screen_*`, `dpr`, `zoom`).
+All colors are sRGB `rgba` objects `{ r, g, b, a }` with 0..1 floats.
+
+## 1. Frame rendering
+
+The engine owns the viewport (pan/zoom) and the document. The UI requests a raster:
+
+```ts
+// returns raw RGBA8 straight-alpha pixels, length = width*height*4, width/height from state.viewport*dpr
+const pixels: ArrayBuffer = await invoke("render_frame", { quality: 1.0 });
+```
+
+The UI keeps one frame in flight; after an `EngineUpdate` with a new `frame_id`, it requests
+a frame and paints it. During continuous gestures the UI may request `quality: 0.5`.
+
+The overlay (selection, handles, guides, marquee, cursors) is **not** in the raster. Rust
+returns it as JSON in `EngineState.overlay`; the UI draws it in a DOM/canvas2D overlay layer
+using world→screen transforms from `state.viewport`.
+
+World↔screen: `screen = (world - {x, y}) * zoom`; `world = {x, y} + screen / zoom`.
+
+## 2. Engine state
+
+```ts
+interface EngineState {
+  doc: DocMeta | null;
+  revision: number;        // bump on any document mutation (undo included)
+  frame_id: number;        // bump when pixels need re-requesting
+  viewport: Viewport;      // { x, y, zoom, width, height, dpr }  (width/height CSS px)
+  tool: ToolId;
+  selection: string[];
+  hover: string | null;
+  overlay: Overlay;
+  can_undo: boolean;
+  can_redo: boolean;
+  dirty: boolean;
+  summary: DocSummary | null;
+  selection_details: NodeDetail[];
+  text_edit: TextEditState | null;
+  errors: EngineError[];   // drained each call; { code, message, severity }
+  status: string | null;   // transient status line ("Saved", "3 assets exported")
+}
+
+interface DocMeta { id: string; name: string; path: string | null; schema: number; revision: number; }
+
+interface DocSummary {
+  pages: { id: string; name: string }[];
+  active_page: string;
+  nodes: TreeNode[];             // flat pre-order of the active page (root frames and all descendants)
+  styles: { paints: StyleEntry[]; texts: StyleEntry[]; effects: StyleEntry[] };
+  components: ComponentEntry[];  // { node_id, name, kind: "component" | "component_set" }
+  variables: VariableCollectionEntry[];
+}
+
+interface TreeNode {
+  id: string; name: string; kind: NodeKind; depth: number;
+  parent: string | null; visible: boolean; locked: boolean;
+  child_count: number; is_component: boolean; is_instance: boolean;
+  frame: Rect;                 // world-space AABB for the layers panel/thumbnails
+}
+
+interface StyleEntry { id: string; name: string; }
+interface ComponentEntry { node_id: string; name: string; kind: "component" | "component_set"; }
+interface VariableCollectionEntry { id: string; name: string; modes: { id: string; name: string }[]; }
+
+type NodeKind =
+  | "frame" | "group" | "component" | "component_set" | "instance"
+  | "rectangle" | "ellipse" | "line" | "polygon" | "star" | "vector"
+  | "text" | "image" | "boolean" | "slice" | "sticky" | "connector";
+
+interface NodeDetail {   // full editable node state for the inspector / dev mode
+  id: string; name: string; kind: NodeKind; parent: string | null;
+  transform: Transform;          // { x, y, w, h, rotation, flip_x, flip_y }
+  visible: boolean; locked: boolean; opacity: number; blend: string;
+  fills: Fill[]; strokes: Stroke[]; effects: Effect[]; corner_radii: CornerRadii;
+  fill_rule: "nonzero" | "evenodd";
+  text: TextContent | null;
+  layout: AutoLayout | null;
+  constraints: Constraints | null;
+  component: ComponentRole | null;
+  is_inside_instance: boolean;
+  absolute_bounds: Rect;         // world AABB
+  resolved: ResolvedStyle | null; // computed colors/flags for Dev Mode (null in v1 until devmode lands)
+}
+```
+
+`Fill`, `Stroke`, `Effect`, `Transform`, `TextContent`, `AutoLayout`, `Constraints`,
+`ComponentRole`, `Rect` mirror [DOCUMENT-FORMAT.md](DOCUMENT-FORMAT.md) (camelCase in TS,
+snake_case in Rust; serde rename is not used — TypeScript uses the serialized snake_case
+names to avoid a translation layer; see `contract.ts` for the exact shapes).
+
+`Overlay`:
+
+```ts
+interface Overlay {
+  selection: SelectionBox[];     // { id, corners: [Point,Point,Point,Point] } world-space, rotated
+  hover: SelectionBox | null;
+  handles: Handle[];             // { kind: "corner"|"edge"|"rotate", pos: Point, cursor: string }
+  marquee: Rect | null;
+  snap_lines: SnapLine[];        // { axis: "x"|"y", pos: number, from: number, to: number }
+  guides: Guide[];               // { axis: "x"|"y", pos: number }
+  cursors: PeerCursor[];         // { actor, name, color, world: Point } (collab later)
+  tool_hint: string | null;
+  text_edit: { caret: Point; selection: [number, number] } | null;
+}
+```
+
+## 3. Commands (Tauri `invoke`)
+
+| command | args | returns | notes |
+|---|---|---|---|
+| `bootstrap` | – | `Bootstrap` | app version, recent files, preferences, capabilities |
+| `new_document` | `{ kind: DocKind }` | `EngineState` | creates default page + starter frame |
+| `open_document` | `{ path: string }` | `EngineState` | validates + migrates |
+| `close_document` | – | `EngineState` | prompts UI-side for unsaved |
+| `save_document` | `{ path?: string }` | `SaveResult` | autosave already runs in engine |
+| `engine_state` | – | `EngineState` | re-sync panels after UI reload |
+| `set_tool` | `{ tool: ToolId }` | `EngineState` | |
+| `pointer` | `PointerInput` | `EngineState` | down/move/up/dblclick, screen px |
+| `wheel` | `WheelInput` | `EngineState` | engine applies zoom/pan |
+| `key` | `KeyInput` | `EngineState` | only when engine owns focus (text/pen) |
+| `command` | `{ name: string, args?: unknown }` | `EngineState` | discrete commands, see §4 |
+| `render_frame` | `{ quality?: number }` | `ArrayBuffer` | raw RGBA |
+| `node_details` | `{ ids: string[] }` | `NodeDetail[]` | inspector/dev-mode |
+| `export_png` | `ExportRaster` | `ExportResult` | dialog handled UI-side |
+| `export_svg` | `ExportVector` | `ExportResult` | |
+| `export_pdf` | `ExportPdf` | `ExportResult` | |
+| `import_svg` | `{ path, page_id?, parent_id? }` | `EngineState` | real import |
+| `import_image` | `{ path }` | `EngineState` | adds image asset + fill |
+| `set_preference` | `{ key: string, value: unknown }` | `Bootstrap` | persisted in SQLite |
+
+```ts
+interface Viewport { x: number; y: number; zoom: number; width: number; height: number; dpr: number; }
+type DocKind = "design" | "whiteboard" | "slides" | "site" | "illustration";
+type ToolId =
+  | "move" | "hand" | "frame" | "slice" | "rectangle" | "ellipse" | "line"
+  | "polygon" | "star" | "pen" | "node" | "text" | "image" | "comment" | "connector";
+type SaveResult = { path: string; revision: number; bytes: number };
+
+interface PointerInput {
+  kind: "down" | "move" | "up" | "double_click" | "leave";
+  button: 0 | 1 | 2;                       // 0 left, 1 middle, 2 right
+  screen_x: number; screen_y: number;      // CSS px relative to the canvas element
+  shift: boolean; alt: boolean; ctrl: boolean; meta: boolean;
+  pressure?: number;
+  timestamp_ms: number;
+}
+interface WheelInput {
+  delta_x: number; delta_y: number;
+  screen_x: number; screen_y: number;
+  shift: boolean; ctrl: boolean; alt: boolean; meta: boolean;
+}
+interface KeyInput {
+  kind: "down" | "up";
+  key: string; code: string;
+  shift: boolean; alt: boolean; ctrl: boolean; meta: boolean;
+  repeat: boolean;
+}
+interface TextEditState {
+  node_id: string;
+  screen_rect: Rect;            // where the UI editor overlay goes
+  characters: string;
+  caret: number;                // UTF-16 index into characters (v1 limitation, documented)
+  selection: [number, number] | null;
+  font: { family: string; weight: number; italic: boolean; size: number; line_height: number; letter_spacing: number; align: string };
+  color: { r: number; g: number; b: number; a: number };
+}
+interface ExportRaster { node_ids?: string[]; scale: number; transparent: boolean; path: string; }
+interface ExportVector { node_ids?: string[]; path: string; }
+interface ExportPdf { node_ids?: string[]; path: string; }
+interface ExportResult { path: string; bytes: number; width?: number; height?: number; format: string; }
+```
+
+## 4. Discrete command names (`invoke("command", { name, args })`)
+
+History: `undo`, `redo`, `delete`, `duplicate`, `copy`, `paste`, `cut`, `select_all`,
+`select_none`, `select_inverse`, `group`, `ungroup`, `mask_with_selection`, `create_component`,
+`create_component_set`, `detach_instance`, `swap_instance`.
+
+Ordering: `bring_to_front`, `bring_forward`, `send_backward`, `send_to_back`,
+`move_to_parent`, `reorder` (`{ node_id, new_parent_id, index }`).
+
+View: `zoom_in`, `zoom_out`, `zoom_to`, `zoom_fit`, `zoom_selection`, `zoom_100`,
+`pan_by`, `set_viewport`.
+
+Edit: `apply_patch` (`{ ids, patch: NodePatch, label, coalesce_key? }`), `rename_node`,
+`toggle_visible`, `toggle_locked`, `set_opacity`, `nudge` (`{ dx, dy, ids? }`),
+`align` (`{ ids?, align: "left"|"hcenter"|"right"|"top"|"vcenter"|"bottom" }`),
+`distribute` (`{ ids?, axis: "horizontal"|"vertical", spacing: "gap"|"center" }`),
+`boolean` (`{ ids?, op: "union"|"subtract"|"intersect"|"exclude" }`),
+`flatten`, `outline_stroke`, `text_edit_begin`, `text_edit_input`,
+`text_edit_set_caret`, `text_edit_commit`, `text_edit_cancel`.
+
+Prototype: `set_interaction`, `remove_interaction`, `prototype_play`, `prototype_stop`
+(implemented in the prototype phase; unknown commands return a structured `unsupported`
+error instead of failing silently).
+
+Dev mode: `dev_mode_toggle`, `dev_mode_mark_ready`, `dev_mode_export_asset`,
+`dev_mode_generate_code` (`{ language }`), `dev_mode_add_annotation`.
+
+`NodePatch` is a partial `NodeDetail`-shaped object; only provided fields are applied.
+`coalesce_key` merges consecutive patches with the same key into one undo step.
+
+All commands return a full `EngineState` (except render/export/details). Unknown command
+names, invalid arguments and disallowed ops return `EngineError { code, message }` and
+leave the document untouched; they never panic the app.
+
+## 5. Errors and status
+
+* `EngineError.code` is a stable machine-readable string (`"validation"`, `"io"`,
+  `"permission"`, `"unsupported"`, `"conflict"`, `"internal"`).
+* The UI shows errors in a non-blocking banner (with "details" expander) and keeps
+  running; destructive failures never close the document without a save prompt.
+* `status` is a transient human message; the UI displays it in the status bar for ~4 s.
+* Engine panics are caught at the command boundary and converted to `internal` errors
+  (the document snapshot is preserved by the autosave journal).
+
+## 6. UI-owned responsibilities
+
+* Chrome: toolbar, sidebars, status bar, dialogs, command palette, context menus, toasts.
+* Keyboard shortcut definitions (customizable, persisted UI-side via `set_preference`).
+* Text input composition (IME) through a DOM textarea; the engine validates and stores text.
+* File dialogs (Tauri dialog plugin) and drag-and-drop file paths.
+* Theme (dark by default), density, and font-size preferences.
+* Presentation shells for prototype preview / Dev Mode (Rust supplies the data/render).

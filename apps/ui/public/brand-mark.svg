@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Icon Crafter">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#171a21"/>
+      <stop offset="1" stop-color="#0b0c10"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff8a66"/>
+      <stop offset="1" stop-color="#f04a3c"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" rx="228" fill="url(#tile)"/>
+  <rect x="12" y="12" width="1000" height="1000" rx="222" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="10"/>
+  <polygon points="512.00,202.75 574.27,449.73 821.25,512.00 574.27,574.27 512.00,821.25 449.73,574.27 202.75,512.00 449.73,449.73" fill="url(#accent)"/>
+  <circle cx="512" cy="512" r="73" fill="#2dd4bf"/>
+</svg>
