@@ -110,8 +110,8 @@ Last updated: session 7 (design-system engine authoring: components, instances, 
 
 | # | Feature | Status | Evidence / notes |
 |---|---|---|---|
-| P1 | Interaction graph (frames/components), triggers click/hover/press/drag | in progress | engine triggers click/hover/press/key/after-delay + runtime firing tested (dp-prototype); drag trigger + authoring UI not built |
-| P2 | Actions: navigate, overlay open/close, scroll to, back | implemented | runtime executes all six actions; editor presentation plays them via a replayable action log (`prototype_play`/`prototype_back`/`prototype_stop`, click hotspots); tests incl overlay stack, back navigation and canvas hotspot click; preview chrome UI pending |
+| P1 | Interaction graph (frames/components), triggers click/hover/press/drag | in progress | engine triggers click/hover/press/key/after-delay + runtime firing tested (dp-prototype); authoring is real (`add_interaction`/`remove_interaction`, `NodeDetail.prototype`, undoable patches, validated payloads, 3 integration tests); drag trigger + authoring UI not built |
+| P2 | Actions: navigate, overlay open/close, scroll to, back | implemented | runtime executes all six actions; editor presentation plays them via a replayable action log (`prototype_play`/`prototype_back`/`prototype_stop`, engine hit-testing); `prototype.hotspots` exposes world-space interactive rects; tests incl overlay stack, back navigation and canvas hotspot click; presentation overlay shell UI in flight (frontend milestone 4) |
 | P3 | Transitions: instant/dissolve/slide/smart animate, duration/easing/spring | implemented | transition progress, spring easing and tick-driven completion tested; editor playback ticks transitions to completion; smart-animate pair matching (UI side) pending |
 | P4 | Variables + conditional logic, expressions, multiple actions | implemented | runtime variables, alias resolution, arithmetic/logic expression parser (8 expr tests) and multi-action chains tested |
 | P5 | Device/viewport presets, responsive preview, presentation mode, keyboard | in progress | device presets + keyboard triggers in engine; editor presentation mode implemented (fits frame, hotspot clicks, Escape stop, Backspace back, editing chrome hidden); responsive preview + presentation UI shell pending |
@@ -121,10 +121,10 @@ Last updated: session 7 (design-system engine authoring: components, instances, 
 
 | # | Feature | Status | Evidence / notes |
 |---|---|---|---|
-| D1 | Inspect dimensions/spacing/constraints/colors/type/effects/components/variables | implemented (engine) | `dp-devmode::inspect` resolves layout, variables, styles, typography, component refs; 14 tests; UI panel pending |
-| D2 | Deterministic CSS / React+TS / SwiftUI / Compose generation | implemented (engine) | `dp-devmode::codegen`, deterministic-output test, warnings + `requires_manual_adaptation`; SwiftUI/Compose always flagged manual |
-| D3 | Asset export panel + copy measurements/styles | in progress | scoped PNG/SVG/PDF export dialogs work end-to-end (engine + UI); copy-measurements affordances in the UI still pending |
-| D4 | Annotations, ready-for-dev status, links to code/docs, revision compare | implemented (engine) | `dp-devmode::workbench` (annotations/resolve/link/readiness/structural diff) tested; UI panel pending |
+| D1 | Inspect dimensions/spacing/constraints/colors/type/effects/components/variables | implemented (engine + UI) | `dp-devmode::inspect` resolves layout, variables, styles, typography, component refs; 14 tests; native Tauri window verified: Dev Mode Inspect tab shows real metrics (position 15,-317; size 160×93; parent Button; fill #d9d9d9) — screenshot in artifacts/devmode-native-inspect.png |
+| D2 | Deterministic CSS / React+TS / SwiftUI / Compose generation | implemented (engine + UI) | `dp-devmode::codegen`, deterministic-output test, warnings + `requires_manual_adaptation`; native window verified Code tab renders real CSS (160px×93px, background #d9d9d9) with manual-adaptation banner — screenshot artifacts/devmode-native-code.png |
+| D3 | Asset export panel + copy measurements/styles | implemented | scoped PNG/SVG/PDF export dialogs work end-to-end (engine + UI); Dev Mode Inspect exposes Copy measurements / Copy snapshot JSON / Copy first fill colour (verified in native window); asset export panel with scale/format flows through the real export commands |
+| D4 | Annotations, ready-for-dev status, links to code/docs, revision compare | implemented (engine + UI) | `dp-devmode::workbench` (annotations/resolve/link/readiness/structural diff) tested; Annotate/Compare tabs in the UI; `dev_resolve_annotation` IPC now resolves annotations (was the last engine gap); revision capture/compare persisted up to 5 captures |
 
 ## Collaboration & backend (Phase 6)
 
@@ -164,9 +164,9 @@ Last updated: session 7 (design-system engine authoring: components, instances, 
 
 | # | Feature | Status | Evidence / notes |
 |---|---|---|---|
-| Q1 | Unit + integration tests across crates and server | planned | |
-| Q2 | Benchmarks for large documents (10k nodes), reported numbers | planned | |
-| Q3 | Dependency audit, secret scan, security review | planned | |
+| Q1 | Unit + integration tests across crates and server | implemented | engine + desktop IPC: 13 crates, **332 tests** in the last full run (geom 44, model 72, text 13, layout 12, render 6+11, io 9, persist 13, editor 28, collab 19, prototype 18, devmode 14, ai 36, plugins 37); backend: 132 unit tests green (`cargo test -p iconcrafter-server --offline --lib`); DB/WS integration tests are `#[ignore]` until Docker/Postgres is available |
+| Q2 | Benchmarks for large documents (10k nodes), reported numbers | implemented | `crates/dp-editor/examples/bench_editor.rs` builds 10,500 nodes and measures layout/render/hit-test/serialize/undo; measured numbers and honest gaps in docs/PERFORMANCE.md (render ~47 ms/frame in dev profile is above the 16 ms target — optimization listed next) |
+| Q3 | Dependency audit, secret scan, security review | in progress | no hardcoded secrets (env-based config); backend uses Argon2id/opaque session tokens; `cargo tree -d` duplicates reviewed but no vuln scanner run yet |
 | Q4 | Installers (Windows MSI/NSIS), upgrade path, reproducibility | planned | |
 | Q5 | Accessibility pass (keyboard, focus, labels) | planned | |
 | Q6 | Offline/no-network operation for core editor | planned | |

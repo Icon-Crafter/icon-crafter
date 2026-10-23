@@ -24,7 +24,7 @@ pub mod snapshot;
 
 use std::path::{Path, PathBuf};
 
-use dp_geom::{Mat2D, Point, Rect, SnapLine};
+use dp_geom::{Mat2D, Point, Rect, SnapLine, SpatialGrid};
 use dp_io::ExportOptions;
 use dp_layout::{LayoutEngine, LayoutMap};
 use dp_model::{
@@ -302,6 +302,8 @@ pub struct EditorState {
     pub text_engine: TextEngine,
     /// Cached layout for the active page.
     pub(crate) layout_cache: Option<LayoutMap>,
+    /// Spatial index over laid-out world bounds, built with the layout cache.
+    pub(crate) hit_index: Option<SpatialGrid<NodeId>>,
     /// Active drag gesture.
     pub(crate) drag: Option<input::DragState>,
     /// Marquee rectangle in world space.
@@ -358,6 +360,7 @@ impl EditorState {
             layout_engine: LayoutEngine::new(),
             text_engine: TextEngine::new(),
             layout_cache: None,
+            hit_index: None,
             dev_mode: false,
             handoff: dp_devmode::Handoff::new(0),
             playback: None,
@@ -400,6 +403,7 @@ impl EditorState {
     /// Invalidates the cached layout (call after any document mutation).
     pub fn invalidate_layout(&mut self) {
         self.layout_cache = None;
+        self.hit_index = None;
     }
 
     /// Recomputes the layout cache when invalid and returns it.
@@ -407,6 +411,22 @@ impl EditorState {
         if self.layout_cache.is_none() {
             let map = self.layout_engine.compute_page(self.document.active_page());
             self.layout_cache = Some(map);
+            let page = self.document.active_page();
+            let mut grid = SpatialGrid::new(256.0);
+            if let Some(map) = self.layout_cache.as_ref() {
+                for id in map.order() {
+                    let Some(node) = page.get(*id) else {
+                        continue;
+                    };
+                    if !node.visible || node.locked {
+                        continue;
+                    }
+                    if let Some(node_layout) = map.get(*id) {
+                        grid.insert(*id, node_layout.world);
+                    }
+                }
+            }
+            self.hit_index = Some(grid);
         }
         self.layout_cache.as_ref().expect("layout just computed")
     }

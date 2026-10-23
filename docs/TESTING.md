@@ -229,3 +229,15 @@ cargo check -p iconcrafter-desktop                     # exit 0
 ```
 
 Manual/native: run `pnpm --dir apps/ui dev --port 1420` then `cargo build -p iconcrafter-desktop` and start `target\debug\iconcrafter-desktop.exe`; select a shape, open the right sidebar Dev Mode, confirm Inspect values, Switch to Code and copy CSS; add an annotation and resolve it; choose the Prototype section and add a click interaction targeting another frame; press Present and click the hotspot.
+
+
+## Session 11 verification (benchmark + full engine suite)
+
+```powershell
+cd "C:\Users\w4ua\Documents\Icon Crafter"
+cargo test -p dp-geom -p dp-model -p dp-text -p dp-layout -p dp-render -p dp-io -p dp-persist -p dp-editor -p dp-collab -p dp-prototype -p dp-devmode -p dp-ai -p dp-plugins --no-default-features   # 332 passed
+cargo test -p iconcrafter-server --offline --lib   # 132 passed
+cargo run -p dp-editor --example bench_editor      # see docs/PERFORMANCE.md
+```
+
+Expected benchmark profile: Windows dev profile, opt-level 1 for our crates / 2 for deps. Numbers are machine-specific; compare only like-for-like.

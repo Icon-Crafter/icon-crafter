@@ -723,57 +723,60 @@ impl EditorState {
 
     /// Hit tests a world point against visible layers (topmost first).
     pub fn hit_test(&mut self, world: Point) -> Option<NodeId> {
-        let page = self.document.active_page();
-        let mut ids = Vec::new();
-        for root in page.roots.clone() {
-            collect_ids(page, root, &mut ids);
-        }
         self.ensure_layout();
-        let layout = self.layout_cache.as_ref()?;
-        for id in ids.iter().rev() {
-            let Some(node) = self.document.node(*id) else {
+        let order: Vec<NodeId> = match self.layout_cache.as_ref() {
+            Some(layout) => layout.order().to_vec(),
+            None => return None,
+        };
+        let candidates = match self.hit_index.as_ref() {
+            Some(index) => index.query_point(world),
+            None => Vec::new(),
+        };
+        let mut best: Option<(usize, NodeId)> = None;
+        for id in candidates {
+            let Some(node) = self.document.node(id) else {
                 continue;
             };
             if !node.visible || node.locked {
                 continue;
             }
-            if let Some(node_layout) = layout.get(*id)
-                && node_layout.world.contains_point(world)
-            {
-                return Some(*id);
+            let Some(position) = order.iter().position(|candidate| *candidate == id) else {
+                continue;
+            };
+            if best.is_none_or(|(best_position, _)| position > best_position) {
+                best = Some((position, id));
             }
         }
-        None
+        best.map(|(_, id)| id)
     }
 
     /// Returns ids whose world bounds intersect `rect`.
     pub fn nodes_in_rect(&mut self, rect: Rect) -> Vec<NodeId> {
-        let page = self.document.active_page();
-        let mut ids = Vec::new();
-        for root in page.roots.clone() {
-            collect_ids(page, root, &mut ids);
-        }
         self.ensure_layout();
-        let mut found = Vec::new();
-        if let Some(layout) = self.layout_cache.as_ref() {
-            for id in ids {
-                let Some(node) = self.document.node(id) else {
-                    continue;
-                };
-                if !node.visible || node.locked {
-                    continue;
-                }
-                if let Some(node_layout) = layout.get(id) {
-                    let overlaps = node_layout.world.x < rect.right()
-                        && node_layout.world.right() > rect.x
-                        && node_layout.world.y < rect.bottom()
-                        && node_layout.world.bottom() > rect.y;
-                    if overlaps && rect.contains_rect(node_layout.world) {
-                        found.push(id);
-                    }
-                }
+        let order: Vec<NodeId> = match self.layout_cache.as_ref() {
+            Some(layout) => layout.order().to_vec(),
+            None => return Vec::new(),
+        };
+        let candidates = match self.hit_index.as_ref() {
+            Some(index) => index.query(rect),
+            None => Vec::new(),
+        };
+        let mut found: Vec<NodeId> = Vec::new();
+        for id in candidates {
+            let Some(node) = self.document.node(id) else {
+                continue;
+            };
+            if !node.visible || node.locked {
+                continue;
+            }
+            if let Some(layout) = self.layout_cache.as_ref()
+                && let Some(node_layout) = layout.get(id)
+                && rect.contains_rect(node_layout.world)
+            {
+                found.push(id);
             }
         }
+        found.sort_by_key(|id| order.iter().position(|candidate| candidate == id).unwrap_or(usize::MAX));
         found
     }
 

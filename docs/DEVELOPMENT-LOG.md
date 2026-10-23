@@ -342,3 +342,12 @@ deleted `target/debug/incremental` (3.42 GB) while investigating.
 - Editor/engine: `EditorState::add_interaction`/`remove_interaction` (undoable prototype patches, `validate_local` enforcement), `SnapshotDetail.prototype`, `dev_resolve_annotation`; generic command arms `add_interaction`/`remove_interaction`/`dev_resolve_annotation` and real `play`/`stop`; desktop `dev_resolve_annotation` command registered. New integration suite `crates/dp-editor/tests/prototype_authoring.rs` (3 tests) plus existing editor tests: `cargo test -p dp-editor` green (26 tests), strict clippy clean, `cargo check -p iconcrafter-desktop` green. Docs updated (CONTRACT §11 v1.4).
 - Native verification procedure: the debug Tauri binary points at `devUrl` (localhost:1420), so a WebView2 window with `TAURI IPC` requires `pnpm dev`; for a self-contained check use `--release` with `frontendDist` or keep the dev server running. See docs/TESTING.md.
 - Next: frontend milestone 4 (design-system panels + prototype authoring/presentation UI); then collaboration transport wiring (desktop â†” Axum WS relay) and remaining workspaces.
+
+
+## Session 11 (2026-10-24) â€” performance benchmark + spatial-index hit testing
+
+- Added `crates/dp-editor/examples/bench_editor.rs` (10,500-node document: 500 frames Ã— 20 children) measuring layout, bounds lookups, 1440Ã—900 render, pointer clicks, canonical JSON round-trip and delete+undo. Numbers and honest assessment in `docs/PERFORMANCE.md` (render is the remaining gap: ~54 ms/frame dev profile).
+- Optimization: hit testing and marquee selection now use a `dp_geom::SpatialGrid<NodeId>` built together with the layout cache (invalidated on document change). 200 click pairs: 395.8 ms â†’ 241.4 ms (~39% faster, ~1.2 ms/click). Layout/index rebuild cost: 11.7 ms cold for 10,500 nodes.
+- Full engine suite re-run green: 13 crates, 332 tests (counts per crate in docs/FEATURE-CHECKLIST.md Q1); backend unit suite re-run after the model changes: 132 passed.
+- Dev Mode verified natively in the Tauri window (real Inspect metrics + generated CSS), screenshots in artifacts/devmode-native-inspect.png / devmode-native-code.png.
+- Next: overlay rebuild cost, scene culling via spatial index, then frontend milestone 4 integration (design systems + prototype authoring/presentation UI).
