@@ -451,6 +451,11 @@ impl EditorState {
         dp_devmode::compare_documents(&self.document, other)
     }
 
+    /// Serialized document used to capture a revision for later comparison.
+    pub fn document_json(&self) -> Result<String, EditorError> {
+        self.document.to_json_string().map_err(EditorError::from)
+    }
+
     /// Adds a developer annotation to a node and returns its id.
     pub fn dev_add_annotation(
         &mut self,

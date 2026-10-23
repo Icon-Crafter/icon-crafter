@@ -680,6 +680,12 @@ pub fn dev_compare(
     })
 }
 
+/// Returns the current document as canonical JSON string (Dev Mode revision capture).
+#[tauri::command]
+pub fn dev_snapshot(state: State<'_, IpcState>) -> Result<String, IpcError> {
+    with_editor(&state, |editor| editor.document_json().map_err(IpcError::from))
+}
+
 fn parse_code_target(target: &str) -> Result<dp_devmode::CodeTarget, IpcError> {
     match target {
         "css" => Ok(dp_devmode::CodeTarget::Css),

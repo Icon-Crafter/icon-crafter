@@ -154,3 +154,37 @@ type/effects; codegen tab returns CSS + React (deterministic — same selection 
 strings); mark ready with an open annotation must surface the open-annotation warning in the UI;
 compare two saves shows added/removed/changed counts.
 
+## Session 7 verification — design systems + instance rendering
+
+```powershell
+# Engine foundations (unchanged)
+cargo test -p dp-geom -p dp-model -p dp-text -p dp-layout --no-default-features
+
+# New: design-system transactions in the model (72 tests, +7)
+cargo test -p dp-model --no-default-features
+
+# Renderer: instance expansion (17 tests: 6 unit + 11 integration)
+cargo test -p dp-render --no-default-features
+
+# Editor commands + integration flows (22 tests, +3)
+cargo test -p dp-editor --no-default-features
+
+# Strict lint gate for the touched crates
+cargo clippy -p dp-model -p dp-render -p dp-editor --no-default-features --all-targets `
+  -- -D warnings
+
+# Full engine regression
+cargo test -p dp-geom -p dp-model -p dp-text -p dp-layout -p dp-render `
+  -p dp-io -p dp-persist -p dp-editor -p dp-collab -p dp-prototype `
+  -p dp-devmode --no-default-features
+# Expected: 44 + 72 + 13 + 12 + 17 + 9 + 13 + 22 + 19 + 18 + 14 = 253 passed.
+```
+
+Manual checks when the design-system panels land: create a component from two layers (master
+appears with both children, world positions unchanged), place an instance (canvas shows the
+master content, selecting it selects the instance), detach it (becomes a frame), create a fill
+style from a rectangle, apply it to another rectangle (fill shows the style binding), create a
+colour variable and switch active mode (canvas previews the new value). Deleting an in-use
+style must raise a validation report rather than silently clearing references.
+
+

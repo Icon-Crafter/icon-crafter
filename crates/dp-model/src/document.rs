@@ -112,7 +112,7 @@ pub struct ComponentSetMeta {
 }
 
 /// Document-wide component registry.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ComponentRegistry {
     /// Components by id.
     #[serde(default)]

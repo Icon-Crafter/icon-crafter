@@ -376,3 +376,32 @@ Errors: unknown `target`/`status`/`kind`, empty selection (`dev_codegen`), and i
 as fake success. Presentation-only notes: measurement copy strings are produced UI-side from
 the snapshot; the handoff record is local to the editor session until collaboration sync lands.
 
+## 10. v1.4 addendum — design-system commands (`command` names)
+
+All commands return the standard `EngineState`; unknown ids/arguments produce contract
+`validation` errors, never silent success. `ids` defaults to the current selection.
+
+| Command | Args | Notes |
+|---|---|---|
+| `create_component` | `{ name?, ids? }` | Selection must share one parent; the master is inserted at the selection's position and the layers are reparented (world positions preserved). Selects the master. Component sets are not created yet. |
+| `place_instance` | `{ component_id, x, y, parent_id? }` | Creates a linked instance sized from the master; selects it. |
+| `detach_instance` | `{ ids? }` | Instance → frame; component reference removed. Errors when no instance is selected. |
+| `create_style_from_node` | `{ node_id?, name? }` | Derives a paint/text/effect style from the node (text → text style, else first fill, else effects, else first stroke). |
+| `apply_style` | `{ style_id, ids? }` | Paint style replaces fills with one style-bound fill; text styles assign typography; effect styles assign effects. |
+| `rename_style` | `{ style_id, name }` | |
+| `delete_style` | `{ style_id }` | References on nodes are left in place so validation reports them; the UI must warn before deleting in use. |
+| `create_variable_collection` | `{ name }` | Errors when a collection with that name exists. |
+| `create_color_variable` | `{ collection?, name, color }` | `color` is `#rgb`/`#rrggbb(aa)`; collection is created when missing (default name `Theme`). |
+| `create_float_variable` | `{ collection?, name, value }` | |
+| `set_variable_value` | `{ variable_id, value, mode_id? }` | `value` accepts a number, a hex colour string, or `{ kind: "color"|"float"|"string"|"boolean", ... }`; `mode_id` defaults to the active mode (else the collection default). |
+| `set_active_mode` | `{ collection_id, mode_id }` | Undoable via `SetSettings`. |
+| `dev_mode_toggle` | `{ enabled? }` | Now implemented (toggles Dev Mode); returns no document change. |
+
+Shape change: `SnapshotComponent` now carries `component_id?: string` — the registry id used
+by `place_instance` (absent for component sets, which cannot be instanced yet).
+
+Rendering/limitations: instances render their master's subtree at the instance transform, with
+clip/opacity preserved; masters must live on the same page (other pages produce a warning and
+a plain box), and instance overrides/variants are **not** applied. Style deletion leaves
+broken references (by design) so validation can report them.
+

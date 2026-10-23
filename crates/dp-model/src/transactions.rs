@@ -10,12 +10,13 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::ModelError;
-use crate::document::Document;
+use crate::document::{ComponentRegistry, Document, DocumentSettings};
 use crate::geometry::{AutoLayout, Constraints, NodeGeometry, TextContent};
 use crate::ids::{NodeId, PageId};
 use crate::node::{ComponentRole, Node, PrototypeNode, Transform};
 use crate::paint::BlendMode;
-use crate::style::NodeStyle;
+use crate::style::{NodeStyle, StyleRegistry};
+use crate::variables::VariableRegistry;
 
 /// A partial update to a node's properties.
 ///
@@ -272,6 +273,34 @@ pub enum Edit {
         /// Index after the move.
         new_index: usize,
     },
+    /// Replace the document-wide style registry.
+    SetStyles {
+        /// Registry before the edit.
+        before: StyleRegistry,
+        /// Registry after the edit.
+        after: StyleRegistry,
+    },
+    /// Replace the document-wide component registry.
+    SetComponents {
+        /// Registry before the edit.
+        before: ComponentRegistry,
+        /// Registry after the edit.
+        after: ComponentRegistry,
+    },
+    /// Replace the document-wide variable registry.
+    SetVariables {
+        /// Registry before the edit.
+        before: VariableRegistry,
+        /// Registry after the edit.
+        after: VariableRegistry,
+    },
+    /// Replace editor settings (for example active variable modes).
+    SetSettings {
+        /// Settings before the edit.
+        before: DocumentSettings,
+        /// Settings after the edit.
+        after: DocumentSettings,
+    },
 }
 
 impl Edit {
@@ -282,6 +311,10 @@ impl Edit {
             Edit::InsertNode { .. } => "insert",
             Edit::RemoveNode { .. } => "delete",
             Edit::Reparent { .. } => "move",
+            Edit::SetStyles { .. } => "restyle",
+            Edit::SetComponents { .. } => "component",
+            Edit::SetVariables { .. } => "variables",
+            Edit::SetSettings { .. } => "settings",
         }
     }
 
@@ -328,6 +361,22 @@ impl Edit {
                 page.reorder(*node_id, *new_parent, Some(*new_index))?;
                 Ok(())
             }
+            Edit::SetStyles { after, .. } => {
+                document.styles = after.clone();
+                Ok(())
+            }
+            Edit::SetComponents { after, .. } => {
+                document.components = after.clone();
+                Ok(())
+            }
+            Edit::SetVariables { after, .. } => {
+                document.variables = after.clone();
+                Ok(())
+            }
+            Edit::SetSettings { after, .. } => {
+                document.settings = after.clone();
+                Ok(())
+            }
         }
     }
 
@@ -372,6 +421,22 @@ impl Edit {
                     .page_mut(*page)
                     .ok_or(ModelError::PageNotFound(*page))?;
                 page.reorder(*node_id, *old_parent, Some(*old_index))?;
+                Ok(())
+            }
+            Edit::SetStyles { before, .. } => {
+                document.styles = before.clone();
+                Ok(())
+            }
+            Edit::SetComponents { before, .. } => {
+                document.components = before.clone();
+                Ok(())
+            }
+            Edit::SetVariables { before, .. } => {
+                document.variables = before.clone();
+                Ok(())
+            }
+            Edit::SetSettings { before, .. } => {
+                document.settings = before.clone();
                 Ok(())
             }
         }

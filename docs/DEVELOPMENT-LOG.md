@@ -266,4 +266,33 @@ deleted `target/debug/incremental` (3.42 GB) while investigating.
 - Next: Dev Mode panel UI (inspect/codegen/handoff tabs), then collaboration transport
   wiring (desktop ↔ Axum WS relay), component/style/variable authoring UI.
 
+## Session 7 (2026-10-24) — Design systems in the engine
+
+- `dp-model` gained undoable document-level registry edits (`Edit::SetStyles` /
+  `SetComponents` / `SetVariables` / `SetSettings`) and a new `design_system` module:
+  `create_component` (same-parent selection, master sized to world bounds, world positions
+  preserved through inverse matrices), `detach_instance`, `create_instance`, shared
+  paint/text/effect styles created from nodes or values and applied by id, variable
+  collections plus colour/float variables, per-mode values and active-mode switching.
+  `cargo test -p dp-model` → 72 passed.
+- `dp-render` now expands component instances on canvas: the master subtree is rendered at
+  the instance transform with clip/opacity/culling preserved. Masters on other pages and
+  instance overrides are explicit limitations (warned, never silently wrong).
+  `cargo test -p dp-render` → 17 passed (6 unit + 11 integration).
+- `dp-editor` dispatch now implements `create_component`, `place_instance`,
+  `detach_instance`, style create/apply/rename/delete, variable collection/colour/float
+  creation, `set_variable_value`, `set_active_mode` and `dev_mode_toggle`; snapshot
+  components expose the registry `component_id` for placement.
+  `cargo test -p dp-editor` → 22 passed.
+- Full engine suite: **253 passed** (44+72+13+12+17+9+13+22+19+18+14); strict clippy clean
+  for the touched crates. Contract addendum in `docs/CONTRACT.md` §10.
+- Known limitations (documented, not hidden): component sets/variants/instance overrides and
+  swap are not implemented (`unsupported`); libraries/shared-library sync planned; masters
+  must be on the same page to render; style deletion leaves broken references that validation
+  reports; variable aliases work in the engine but have no authoring UI yet.
+- Next: frontend milestone 4 (design-system panels: components/library, style list + apply,
+  variables collections/modes) against these commands; then collaboration transport wiring
+  (desktop ↔ Axum WS relay) and prototype UI.
+
+
 

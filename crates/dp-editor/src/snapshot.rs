@@ -11,7 +11,9 @@
 //! the contract.
 
 use dp_geom::{Point, Rect};
-use dp_model::{CollectionId, Color, ModeId, NodeId, PageId, StyleId, TextAlign, TextStyle};
+use dp_model::{
+    CollectionId, Color, ComponentId, ModeId, NodeId, PageId, StyleId, TextAlign, TextStyle,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -143,6 +145,9 @@ pub struct SnapshotStyles {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SnapshotComponent {
     pub node_id: NodeId,
+    /// Registry id used by `place_instance` (None for component sets until sets
+    /// gain their own placement command).
+    pub component_id: Option<ComponentId>,
     pub name: String,
     pub kind: String,
 }
@@ -393,12 +398,14 @@ impl EditorState {
                 .values()
                 .map(|component| SnapshotComponent {
                     node_id: component.node_id,
+                    component_id: Some(component.id),
                     name: component.name.clone(),
                     kind: "component".to_owned(),
                 })
                 .chain(self.document.components.component_sets.values().map(|set| {
                     SnapshotComponent {
                         node_id: set.node_id,
+                        component_id: None,
                         name: set.name.clone(),
                         kind: "component_set".to_owned(),
                     }

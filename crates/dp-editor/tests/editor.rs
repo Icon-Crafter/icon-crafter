@@ -396,6 +396,151 @@ fn rename_and_opacity_commands_apply_patches() {
     assert!((node.opacity - 0.5).abs() < 1e-9);
 }
 
+#[test]
+fn components_can_be_created_instanced_and_detached() {
+    let mut state = new_editor();
+    let a = add_rect(&mut state, "Button label", 0.0, 0.0, 120.0, 40.0);
+    let b = add_rect(&mut state, "Button icon", 140.0, 0.0, 16.0, 16.0);
+    state
+        .command("select_nodes", &json!({ "ids": [a, b] }))
+        .into_ok();
+    state
+        .command("create_component", &json!({ "name": "Button" }))
+        .into_ok();
+    let snapshot = state.snapshot();
+    let summary = snapshot.summary.expect("summary");
+    assert_eq!(summary.components.len(), 1);
+    let component_id = summary.components[0]
+        .component_id
+        .expect("component registry id");
+    let master_id = summary.components[0].node_id;
+    assert!(matches!(
+        state.document.node(master_id).map(|node| node.kind),
+        Some(NodeKind::Component)
+    ));
+
+    state
+        .command(
+            "place_instance",
+            &json!({ "component_id": component_id, "x": 300.0, "y": 0.0 }),
+        )
+        .into_ok();
+    let instance_id = *state.selection.first().expect("instance selected");
+    assert_eq!(
+        state.document.node(instance_id).map(|node| node.kind),
+        Some(NodeKind::Instance)
+    );
+    let frame = state.render().expect("render instance");
+    assert!(frame.width > 0 && frame.height > 0);
+
+    state
+        .command("detach_instance", &json!({ "ids": [instance_id.to_string()] }))
+        .into_ok();
+    assert_eq!(
+        state.document.node(instance_id).map(|node| node.kind),
+        Some(NodeKind::Frame)
+    );
+}
+
+#[test]
+fn shared_styles_can_be_created_and_applied() {
+    let mut state = new_editor();
+    let source = add_rect(&mut state, "Source", 0.0, 0.0, 100.0, 50.0);
+    let target = add_rect(&mut state, "Target", 200.0, 0.0, 100.0, 50.0);
+    let page_id = state.document.active_page_id();
+    let page = state.document.page_mut(page_id).expect("page");
+    page.nodes
+        .get_mut(&source)
+        .expect("source node")
+        .style
+        .fills = vec![dp_model::Fill::solid(
+        dp_model::Color::from_hex("#ff6b4a").expect("colour"),
+    )];
+    state.select(source, false);
+    state
+        .command("create_style_from_node", &json!({ "name": "Brand Fill" }))
+        .into_ok();
+    let snapshot = state.snapshot();
+    let style = snapshot
+        .summary
+        .expect("summary")
+        .styles
+        .paints[0]
+        .clone();
+    assert_eq!(style.name, "Brand Fill");
+
+    state
+        .command(
+            "select_nodes",
+            &json!({ "ids": [target.to_string()] }),
+        )
+        .into_ok();
+    state
+        .command("apply_style", &json!({ "style_id": style.id }))
+        .into_ok();
+    let target_node = state.document.node(target).expect("target");
+    assert_eq!(
+        target_node.style.fills.first().and_then(|fill| fill.style_id),
+        Some(style.id)
+    );
+}
+
+#[test]
+fn variable_collections_and_values_work_through_commands() {
+    let mut state = new_editor();
+    state
+        .command(
+            "create_color_variable",
+            &json!({ "collection": "Brand", "name": "color/primary", "color": "#ff6b4a" }),
+        )
+        .into_ok();
+    let snapshot = state.snapshot();
+    let summary = snapshot.summary.expect("summary");
+    let collection = summary
+        .variables
+        .iter()
+        .find(|collection| collection.name == "Brand")
+        .expect("Brand variable collection");
+    assert!(!collection.modes.is_empty());
+    let variable_id = state
+        .document
+        .variables
+        .variables
+        .values()
+        .find(|variable| variable.name == "color/primary")
+        .expect("variable")
+        .id;
+    let mode = collection.modes[0].id;
+    state
+        .command(
+            "set_variable_value",
+            &json!({ "variable_id": variable_id, "value": "#00ff00", "mode_id": mode }),
+        )
+        .into_ok();
+    let resolved = state
+        .document
+        .variables
+        .resolve_color(variable_id, mode)
+        .expect("resolved colour");
+    assert_eq!(resolved.to_hex(), "#00ff00");
+
+    state
+        .command(
+            "set_active_mode",
+            &json!({ "collection_id": collection.id, "mode_id": mode }),
+        )
+        .into_ok();
+    assert_eq!(
+        state
+            .document
+            .settings
+            .active_modes
+            .get(&collection.id)
+            .copied(),
+        Some(mode)
+    );
+}
+
 trait IntoOk {
     fn into_ok(self);
 }

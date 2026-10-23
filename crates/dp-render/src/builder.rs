@@ -11,8 +11,8 @@ use std::sync::Arc;
 use dp_geom::{FillRule as GeomFillRule, Mat2D, Point, Rect, Size, VectorPath};
 use dp_layout::LayoutMap;
 use dp_model::{
-    Color, Document, Fill, FillRule, Node, NodeId, NodeKind, NodeStyle, Page, PageId, Paint,
-    Stroke, StrokeAlign, TextContent, TextStyle,
+    Color, ComponentRole, Document, Fill, FillRule, Node, NodeId, NodeKind, NodeStyle, Page, PageId,
+    Paint, Stroke, StrokeAlign, TextContent, TextStyle,
 };
 use dp_text::TextEngine;
 
@@ -132,6 +132,20 @@ impl Builder<'_> {
             });
         }
 
+        // Component instances render their master's content at the instance
+        // transform. Masters on other pages are not rendered yet (warned)
+        // because a builder only holds one page; the instance then draws its
+        // own box as an honest fallback.
+        if node.kind == NodeKind::Instance {
+            if self.render_instance(node, matrix, clip, opacity) {
+                return;
+            }
+            if let Some(item) = self.make_item(node, matrix, local, world_bounds, clip, opacity) {
+                self.list.items.push(item);
+            }
+            return;
+        }
+
         // Cull leaves outside the visible region. Containers are always walked
         // because unclipped children may extend past their bounds.
         let is_container = !node.children.is_empty();
@@ -158,6 +172,100 @@ impl Builder<'_> {
             for child in children {
                 self.visit(*child, child_clip, opacity);
             }
+        }
+    }
+
+    /// Renders a component instance's master subtree.
+    ///
+    /// Returns `true` when the instance was expanded (or deliberately skipped
+    /// with a warning) and the caller must not draw the instance box; `false`
+    /// asks the caller to fall back to drawing the instance itself.
+    fn render_instance(
+        &mut self,
+        instance: &Node,
+        instance_matrix: Mat2D,
+        clip: Option<Rect>,
+        opacity: f64,
+    ) -> bool {
+        let Some(role) = &instance.component else {
+            self.list
+                .warn("component instance has no component reference; drawing its box instead");
+            return false;
+        };
+        let ComponentRole::Instance { component_id, .. } = role else {
+            self.list
+                .warn("instance node has a non-instance component role; drawing its box instead");
+            return false;
+        };
+        let Some(meta) = self.document.components.component(*component_id) else {
+            self.list
+                .warn("component instance references a missing component; drawing its box instead");
+            return false;
+        };
+        let Some((master_page, master)) = self.document.locate_node(meta.node_id) else {
+            self.list
+                .warn("component instance references a missing master node; drawing its box instead");
+            return false;
+        };
+        if master_page.id != self.page.id {
+            self.list.warn(
+                "component masters on other pages are not rendered yet; drawing the instance box instead",
+            );
+            return false;
+        }
+        self.visit_master(master, instance_matrix, clip, opacity, 0);
+        true
+    }
+
+    /// Walks a component master subtree using transforms only (the instance
+    /// replaces the master's own transform, so layout-cache matrices do not
+    /// apply).
+    fn visit_master(
+        &mut self,
+        node: &Node,
+        base: Mat2D,
+        parent_clip: Option<Rect>,
+        parent_opacity: f64,
+        depth: u32,
+    ) {
+        if depth > 16 {
+            self.list.warn(
+                "component instance nesting is deeper than 16 levels; deeper content was skipped",
+            );
+            return;
+        }
+        let opacity = (parent_opacity * node.opacity).clamp(0.0, 1.0);
+        let local = Size::new(node.transform.w.max(0.0), node.transform.h.max(0.0));
+        let world_bounds = base.apply_rect(Rect::new(0.0, 0.0, local.w, local.h));
+        let mut clip = parent_clip;
+        if node.kind.clips_content() {
+            clip = Some(match parent_clip {
+                Some(existing) => intersect_rects(existing, world_bounds),
+                None => world_bounds,
+            });
+        }
+        let is_container = !node.children.is_empty();
+        let culled = !intersects_rect(world_bounds, self.visible);
+        if culled && !is_container {
+            self.list.culled += 1;
+            return;
+        }
+        if !culled
+            && let Some(item) = self.make_item(node, base, local, world_bounds, clip, opacity)
+        {
+            self.list.items.push(item);
+        }
+        for child_id in &node.children {
+            let Some(child) = self.page.get(*child_id) else {
+                self.list
+                    .warn("component master has a child outside the page; skipped");
+                continue;
+            };
+            if !child.visible {
+                continue;
+            }
+            let child_base = base.mul(child.transform.matrix());
+            self.visit_master(child, child_base, clip, opacity, depth + 1);
         }
     }
 

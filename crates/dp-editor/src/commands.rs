@@ -9,7 +9,10 @@ use std::collections::{HashMap, HashSet};
 
 use dp_geom::BooleanOp;
 use dp_model::ops::{Align, DistributeAxis};
-use dp_model::{Edit, ModelError, Node, NodeId, NodePatch, Page, PageId, Transaction, Transform};
+use dp_model::{
+    Color, CollectionId, ComponentId, Edit, ModeId, ModelError, Node, NodeId, NodeKind, NodePatch,
+    Page, PageId, StyleId, Transaction, Transform, VariableId, VariableValue,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -394,10 +397,172 @@ impl EditorState {
                 }
                 Ok(false)
             }
-            "create_component" => Err(EditorError::Unsupported(
-                "components are not implemented in this build yet; the model supports them but the editor commands are pending".to_owned(),
-            )),
-            "create_component_set" | "detach_instance" | "swap_instance" => {
+            "create_component" => {
+                let name = args.get("name").and_then(Value::as_str).unwrap_or("Component");
+                let ids = top_level_selection(self);
+                if ids.is_empty() {
+                    return Err(EditorError::InvalidArguments(
+                        "select one or more layers to create a component".to_owned(),
+                    ));
+                }
+                let page = self.document.active_page_id();
+                let before: HashSet<NodeId> =
+                    self.document.active_page().nodes.keys().copied().collect();
+                let transaction = dp_model::create_component(&self.document, page, &ids, name)?;
+                self.apply(transaction)?;
+                self.selection = new_nodes(self, &before);
+                self.set_status(format!("Created component {name}"));
+                Ok(true)
+            }
+            "detach_instance" => {
+                let ids = resolve_ids(self, args)?;
+                let mut changed = false;
+                for id in ids {
+                    let is_instance = self
+                        .document
+                        .node(id)
+                        .map(|node| node.kind == NodeKind::Instance)
+                        .unwrap_or(false);
+                    if !is_instance {
+                        continue;
+                    }
+                    let page = self.document.active_page_id();
+                    let transaction = dp_model::detach_instance(&self.document, page, id)?;
+                    self.apply(transaction)?;
+                    changed = true;
+                }
+                if !changed {
+                    return Err(EditorError::InvalidArguments(
+                        "select a component instance to detach".to_owned(),
+                    ));
+                }
+                self.set_status("Detached instance".to_owned());
+                Ok(true)
+            }
+            "place_instance" => {
+                let component_id: ComponentId = json_field(args, "component_id")?;
+                let parent = optional_id(args, "parent_id")?;
+                let x = args.get("x").and_then(Value::as_f64).unwrap_or(0.0);
+                let y = args.get("y").and_then(Value::as_f64).unwrap_or(0.0);
+                let page = self.document.active_page_id();
+                let before: HashSet<NodeId> =
+                    self.document.active_page().nodes.keys().copied().collect();
+                let transaction =
+                    dp_model::create_instance(&self.document, page, component_id, parent, x, y)?;
+                self.apply(transaction)?;
+                self.selection = new_nodes(self, &before);
+                Ok(true)
+            }
+            "create_style_from_node" => {
+                let ids = resolve_ids(self, args)?;
+                let id = ids.first().copied().ok_or_else(|| {
+                    EditorError::InvalidArguments("select a layer to create a style from".to_owned())
+                })?;
+                let name = args.get("name").and_then(Value::as_str).unwrap_or("Style");
+                let transaction = dp_model::create_style_from_node(&self.document, id, name)?;
+                self.apply(transaction)?;
+                self.set_status(format!("Created style {name}"));
+                Ok(true)
+            }
+            "apply_style" => {
+                let ids = resolve_ids(self, args)?;
+                let style_id: StyleId = json_field(args, "style_id")?;
+                let transaction = dp_model::apply_style(&self.document, &ids, style_id)?;
+                self.apply(transaction)?;
+                Ok(true)
+            }
+            "rename_style" => {
+                let style_id: StyleId = json_field(args, "style_id")?;
+                let name = text_arg(args, "name")?;
+                let transaction = dp_model::rename_style(&self.document, style_id, name)?;
+                self.apply(transaction)?;
+                Ok(true)
+            }
+            "delete_style" => {
+                let style_id: StyleId = json_field(args, "style_id")?;
+                let transaction = dp_model::delete_style(&self.document, style_id)?;
+                self.apply(transaction)?;
+                Ok(true)
+            }
+            "create_variable_collection" => {
+                let name = text_arg(args, "name")?;
+                let transaction = dp_model::create_variable_collection(&self.document, name)?;
+                self.apply(transaction)?;
+                Ok(true)
+            }
+            "create_color_variable" => {
+                let collection = args
+                    .get("collection")
+                    .and_then(Value::as_str)
+                    .unwrap_or("Theme");
+                let name = text_arg(args, "name")?;
+                let hex = text_arg(args, "color")?;
+                let color = Color::from_hex(hex).ok_or_else(|| {
+                    EditorError::InvalidArguments(format!("invalid colour {hex}"))
+                })?;
+                let transaction =
+                    dp_model::create_color_variable(&self.document, collection, name, color)?;
+                self.apply(transaction)?;
+                Ok(true)
+            }
+            "create_float_variable" => {
+                let collection = args
+                    .get("collection")
+                    .and_then(Value::as_str)
+                    .unwrap_or("Theme");
+                let name = text_arg(args, "name")?;
+                let value = number(args, "value")?;
+                let transaction =
+                    dp_model::create_float_variable(&self.document, collection, name, value)?;
+                self.apply(transaction)?;
+                Ok(true)
+            }
+            "set_variable_value" => {
+                let variable_id: VariableId = json_field(args, "variable_id")?;
+                let collection_id = self
+                    .document
+                    .variables
+                    .variable(variable_id)
+                    .map(|variable| variable.collection_id)
+                    .ok_or_else(|| {
+                        EditorError::InvalidArguments("unknown variable id".to_owned())
+                    })?;
+                let mode_id = match args.get("mode_id").filter(|value| !value.is_null()) {
+                    Some(value) => serde_json::from_value(value.clone())
+                        .map_err(|error| EditorError::InvalidArguments(error.to_string()))?,
+                    None => {
+                        let collection = self
+                            .document
+                            .variables
+                            .collection(collection_id)
+                            .ok_or_else(|| {
+                                EditorError::InvalidArguments(
+                                    "the variable collection is missing".to_owned(),
+                                )
+                            })?;
+                        self.document
+                            .settings
+                            .active_modes
+                            .get(&collection_id)
+                            .copied()
+                            .unwrap_or(collection.default_mode)
+                    }
+                };
+                let value = parse_variable_value(args)?;
+                let transaction =
+                    dp_model::set_variable_value(&self.document, variable_id, mode_id, value)?;
+                self.apply(transaction)?;
+                Ok(true)
+            }
+            "set_active_mode" => {
+                let collection_id: CollectionId = json_field(args, "collection_id")?;
+                let mode_id: ModeId = json_field(args, "mode_id")?;
+                let transaction =
+                    dp_model::set_active_mode(&self.document, collection_id, mode_id)?;
+                self.apply(transaction)?;
+                Ok(true)
+            }
+            "create_component_set" | "swap_instance" => {
                 Err(EditorError::Unsupported(format!(
                     "{name} is not implemented in this build yet"
                 )))
@@ -410,9 +575,14 @@ impl EditorState {
             "play" | "stop" => Err(EditorError::Unsupported(
                 "prototype playback is not implemented in this build yet".to_owned(),
             )),
-            "dev_mode_toggle" => Err(EditorError::Unsupported(
-                "Dev Mode is not implemented in this build yet".to_owned(),
-            )),
+            "dev_mode_toggle" => {
+                let enabled = args
+                    .get("enabled")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(!self.dev_mode);
+                self.set_dev_mode(enabled);
+                Ok(false)
+            }
             "import_svg" | "import_image" => Err(EditorError::Unsupported(
                 "file import is handled by the desktop shell in this build".to_owned(),
             )),
@@ -875,6 +1045,79 @@ fn parse_caret_selection(args: &Value) -> Result<Option<(usize, usize)>, EditorE
     let pair: [usize; 2] = serde_json::from_value(value.clone())
         .map_err(|error| EditorError::InvalidArguments(error.to_string()))?;
     Ok(Some((pair[0].min(pair[1]), pair[0].max(pair[1]))))
+}
+
+fn json_field<T: serde::de::DeserializeOwned>(
+    args: &Value,
+    key: &str,
+) -> Result<T, EditorError> {
+    let value = args
+        .get(key)
+        .cloned()
+        .ok_or_else(|| EditorError::InvalidArguments(format!("{key} is required")))?;
+    serde_json::from_value(value)
+        .map_err(|error| EditorError::InvalidArguments(format!("{key}: {error}")))
+}
+
+fn optional_id(args: &Value, key: &str) -> Result<Option<NodeId>, EditorError> {
+    match args.get(key).filter(|value| !value.is_null()) {
+        Some(value) => serde_json::from_value(value.clone())
+            .map(Some)
+            .map_err(|error| EditorError::InvalidArguments(format!("{key}: {error}"))),
+        None => Ok(None),
+    }
+}
+
+fn parse_variable_value(args: &Value) -> Result<VariableValue, EditorError> {
+    let raw = args
+        .get("value")
+        .cloned()
+        .ok_or_else(|| EditorError::InvalidArguments("value is required".to_owned()))?;
+    if let Some(number) = raw.as_f64() {
+        return Ok(VariableValue::Float { value: number });
+    }
+    if let Some(text) = raw.as_str() {
+        if let Some(color) = Color::from_hex(text) {
+            return Ok(VariableValue::Color { color });
+        }
+        return Ok(VariableValue::String {
+            value: text.to_owned(),
+        });
+    }
+    let kind = raw
+        .get("kind")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    match kind {
+        "color" => {
+            let hex = raw
+                .get("hex")
+                .and_then(Value::as_str)
+                .ok_or_else(|| EditorError::InvalidArguments("color needs a hex string".to_owned()))?;
+            let color = Color::from_hex(hex).ok_or_else(|| {
+                EditorError::InvalidArguments(format!("invalid colour {hex}"))
+            })?;
+            Ok(VariableValue::Color { color })
+        }
+        "float" => Ok(VariableValue::Float {
+            value: raw.get("value").and_then(Value::as_f64).ok_or_else(|| {
+                EditorError::InvalidArguments("float needs a numeric value".to_owned())
+            })?,
+        }),
+        "string" => Ok(VariableValue::String {
+            value: raw
+                .get("value")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+        }),
+        "boolean" => Ok(VariableValue::Boolean {
+            value: raw.get("value").and_then(Value::as_bool).unwrap_or(false),
+        }),
+        other => Err(EditorError::InvalidArguments(format!(
+            "unsupported variable value kind {other}"
+        ))),
+    }
 }
 
 fn number(args: &Value, key: &str) -> Result<f64, EditorError> {

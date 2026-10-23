@@ -52,6 +52,7 @@ pub fn run() {
             ipc::dev_add_annotation,
             ipc::dev_mark_ready,
             ipc::dev_compare,
+            ipc::dev_snapshot,
         ])
         .setup(|app| {
             tracing::info!(

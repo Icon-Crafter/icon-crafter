@@ -7,7 +7,7 @@ tested) · **verified** (verified end-to-end in the running app) · **blocked** 
 Rule: a feature is never marked implemented/verified because a button exists. Each row
 names the verification evidence in the development log or a test.
 
-Last updated: session 6 (Dev Mode engine landed and verified; live desktop IPC verified end-to-end; collaboration protocol in engine; backend unit-tested; frontend capability pass integrated).
+Last updated: session 7 (design-system engine authoring: components, instances, shared styles, variables/modes; instance rendering; 253 engine tests green).
 
 ## Foundation
 
@@ -97,13 +97,13 @@ Last updated: session 6 (Dev Mode engine landed and verified; live desktop IPC v
 
 | # | Feature | Status | Evidence / notes |
 |---|---|---|---|
-| C1 | Create component/component set, instances, nested components | planned | |
-| C2 | Overrides (property/text/instance swap), detach, reset | planned | |
+| C1 | Create component, place instances, nested components | implemented | engine+editor: `create_component` (same-parent selection, master sized to world bounds), `place_instance`, instance rendering expands the master subtree on canvas; component sets, variants and swaps still explicit `unsupported` |
+| C2 | Overrides (property/text/instance swap), detach, reset | in-progress | `detach_instance` works (instance → frame); overrides are not applied yet — instances render the master verbatim; reset planned with overrides |
 | C3 | Variants + component properties | planned | |
-| C4 | Color/text/effect styles | planned | |
-| C5 | Variables, collections, modes, aliases, light/dark themes | planned | |
+| C4 | Color/text/effect styles | implemented | `create_style_from_node`, `apply_style`, `rename_style`, `delete_style`; nodes carry `style_id` references, deletion surfaces broken references through validation instead of silently cleaning up |
+| C5 | Variables, collections, modes, aliases, light/dark themes | implemented | `create_variable_collection`, `create_color_variable`, `create_float_variable`, `set_variable_value`, `set_active_mode`; engine resolves per-mode + aliases (32-deep guard); string/boolean/alias authoring UI pending |
 | C6 | Libraries: publish/consume across files, update + conflict reports | planned | |
-| C7 | Broken-reference detection, usage reporting | planned | |
+| C7 | Broken-reference detection, usage reporting | in-progress | validation reports broken style/variable/component references; `design_system_counts` exposes counts; per-node usage report UI planned |
 
 ## Prototyping (Phase 5)
 
