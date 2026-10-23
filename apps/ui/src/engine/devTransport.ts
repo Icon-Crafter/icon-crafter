@@ -14,20 +14,32 @@
  * selection, move/resize/rotate, pan/zoom, marquee select, undo/redo,
  * group/ungroup, copy/paste/duplicate/delete, align/distribute, reorder,
  * visibility/lock/opacity/rename, apply_patch for the inspector, basic text
- * editing, PNG/SVG downloads and localStorage-backed save/open.
+ * editing, PNG/SVG downloads, localStorage-backed save/open and deterministic
+ * Dev Mode data (inspect, codegen, handoff annotations, revision snapshots).
  *
  * NOT simulated (returns an honest `unsupported` error, surfaced as a toast):
- * boolean operations, vector/pen editing, instances, prototype/dev-mode,
- * PDF export, image import, on-path text, auto layout.
+ * boolean operations, vector/pen editing, instances, prototype interactions,
+ * PDF export, image import, on-path text, auto layout/constraints. Dev Mode
+ * inspection reports those as warnings instead of inventing layout data.
  */
 
 import type {
+  ActionJson,
+  AddAnnotationArgs,
+  Annotation,
+  AnnotationKind,
   ApplyPatchArgs,
+  BlendMode,
   Bootstrap,
+  CodegenTarget,
   Color,
   CommandArgs,
   CommandName,
   CornerRadii,
+  DevComponentInfo,
+  DevEffectInfo,
+  DevStrokeInfo,
+  DevTextInfo,
   DocKind,
   DocMeta,
   DocSummary,
@@ -40,19 +52,35 @@ import type {
   ExportResult,
   ExportVector,
   Fill,
+  GeneratedCode,
+  GeneratedCodeTarget,
+  GradientStopInfo,
+  Handoff,
   Handle,
+  InspectSnapshot,
+  InteractionJson,
   KeyInput,
+  MarkReadyArgs,
   NodeDetail,
+  NodeInspect,
   NodeKind,
   Overlay,
   Paint,
+  PaintInfo,
   PointerInput,
+  PrototypeHotspot,
+  PrototypeNodeJson,
+  PrototypeState,
   Rect,
+  RevisionDiff,
   SaveResult,
   Stroke,
   TextContent,
   ToolId,
   TreeNode,
+  VariableCollectionEntry,
+  VariableEntry,
+  VariableValueJson,
   Viewport,
   WheelInput,
 } from "./contract";
@@ -198,6 +226,7 @@ interface DevNode {
   fill_rule: "nonzero" | "evenodd";
   text: TextContent | null;
   component: NodeDetail["component"];
+  prototype: PrototypeNodeJson | null;
 }
 
 interface DevPage {
@@ -214,7 +243,7 @@ interface DevDocument {
   activePage: string;
   styles: DocSummary["styles"];
   components: DocSummary["components"];
-  variables: DocSummary["variables"];
+  variables: VariableCollectionEntry[];
 }
 
 interface PersistedDocument {
@@ -224,6 +253,21 @@ interface PersistedDocument {
   pages: DevPage[];
   nodes: DevNode[];
   activePage: string;
+  styles?: DocSummary["styles"];
+  components?: DocSummary["components"];
+  variables?: VariableCollectionEntry[];
+}
+
+/** Simulated prototype presentation session. */
+interface PresentationState {
+  frameId: string;
+  frameName: string;
+  /** Overlay frames, bottom-most first. */
+  overlays: string[];
+  /** Frames navigated away from, so Back can return. */
+  history: string[];
+  previousViewport: Viewport;
+  previousSelection: string[];
 }
 
 interface DragState {
@@ -302,6 +346,22 @@ export class DevTransport implements EngineTransport {
   private status: string | null = null;
   private preferences: Record<string, unknown> = {};
   private recentFiles: Bootstrap["recent_files"] = [];
+  private handoff: Handoff = {
+    revision: 0,
+    status: "draft",
+    annotations: [],
+    marked_ready_by: null,
+    marked_ready_at: null,
+  };
+  private annotationSeq = 0;
+  private presentation: PresentationState | null = null;
+  private presentationPointer: { x: number; y: number; worldX: number; worldY: number } | null = null;
+  private interactionSeq = 0;
+  private componentSeq = 0;
+  private variableSeq = 0;
+  private paintStyleData = new Map<string, Fill>();
+  private textStyleData = new Map<string, TextContent["style"]>();
+  private effectStyleData = new Map<string, Effect[]>();
 
   constructor() {
     this.doc = this.buildDemoDocument();
@@ -358,6 +418,9 @@ export class DevTransport implements EngineTransport {
       pages: deepClone(this.doc.pages),
       nodes: [...this.doc.nodes.values()].map((node) => deepClone(node)),
       activePage: this.doc.activePage,
+      styles: deepClone(this.doc.styles),
+      components: deepClone(this.doc.components),
+      variables: deepClone(this.doc.variables),
     };
   }
 
@@ -380,12 +443,13 @@ export class DevTransport implements EngineTransport {
       pages: parsed.pages,
       nodes,
       activePage: parsed.activePage,
-      styles: this.doc?.styles ?? { paints: [], texts: [], effects: [] },
-      components: this.doc?.components ?? [],
-      variables: [],
+      styles: parsed.styles ?? this.doc?.styles ?? { paints: [], texts: [], effects: [] },
+      components: parsed.components ?? this.doc?.components ?? [],
+      variables: parsed.variables ?? this.doc?.variables ?? [],
     };
     this.selection = selection.filter((id) => nodes.has(id));
     this.editing = null;
+    this.presentation = null;
   }
 
   private markMutated(): void {
@@ -623,6 +687,7 @@ export class DevTransport implements EngineTransport {
       fill_rule: "nonzero",
       text: options.text ?? null,
       component: null,
+      prototype: null,
     };
     this.doc?.nodes.set(node.id, node);
     return node;
@@ -643,7 +708,311 @@ export class DevTransport implements EngineTransport {
     node.parent = null;
   }
 
-  // -- demo document -------------------------------------------------------
+  // -- variables / styles / components -------------------------------------
+
+  private allVariables(): { variable: VariableEntry; collection: VariableCollectionEntry }[] {
+    const out: { variable: VariableEntry; collection: VariableCollectionEntry }[] = [];
+    for (const collection of this.doc?.variables ?? []) {
+      for (const variable of collection.variables ?? []) out.push({ variable, collection });
+    }
+    return out;
+  }
+
+  private findVariable(variableId: string): { variable: VariableEntry; collection: VariableCollectionEntry } | null {
+    return this.allVariables().find((entry) => entry.variable.id === variableId) ?? null;
+  }
+
+  private activeModeOf(collection: VariableCollectionEntry): string | null {
+    return collection.active_mode_id ?? collection.modes[0]?.id ?? null;
+  }
+
+  private variableValue(variableId: string, depth = 0): VariableValueJson | null {
+    if (depth > 8) return null;
+    const found = this.findVariable(variableId);
+    if (!found) return null;
+    const modeId = this.activeModeOf(found.collection);
+    const raw = modeId ? found.variable.values[modeId] : undefined;
+    if (!raw) return null;
+    if (raw.type === "alias") return this.variableValue(raw.variable_id, depth + 1);
+    return raw;
+  }
+
+  /** Colour of a fill, following a variable binding when present. */
+  private resolveFillColor(fill: Fill | undefined): string | null {
+    if (!fill) return null;
+    if (fill.variable_id) {
+      const value = this.variableValue(fill.variable_id);
+      if (value?.type === "color") return cssColor(value.color);
+    }
+    return fetchColor(fill.paint);
+  }
+
+  private applyStylePaint(styleId: string, node: DevNode): void {
+    const fill = this.paintStyleData.get(styleId);
+    if (!fill) return;
+    node.fills = [{ ...deepClone(fill), style_id: styleId }];
+  }
+
+  private componentNode(componentId: string | null): DevNode | null {
+    if (!componentId) return null;
+    const entry = this.doc?.components.find((component) => component.component_id === componentId);
+    return entry ? this.node(entry.node_id) : null;
+  }
+
+  private createInstanceFrom(component: DevNode, x: number, y: number, parentId: string | null): string[] {
+    if (!this.doc) return [];
+    const ids = this.subtreeIds(component.id);
+    const idMap = new Map<string, string>();
+    for (const oldId of ids) idMap.set(oldId, newId("node"));
+    const created: string[] = [];
+    for (const oldId of ids) {
+      const source = this.node(oldId);
+      if (!source) continue;
+      const clone = deepClone(source);
+      clone.id = idMap.get(oldId) ?? newId("node");
+      clone.children = clone.children.map((child) => idMap.get(child) ?? child);
+      clone.parent = source.parent ? idMap.get(source.parent) ?? null : null;
+      if (source.id === component.id) {
+        clone.kind = "instance";
+        clone.name = `${component.name} instance`;
+        clone.component = {
+          type: "instance",
+          component_id: component.id,
+          overrides: [],
+          swapped_component_id: null,
+        };
+        clone.transform = { ...clone.transform, x, y };
+      }
+      this.doc.nodes.set(clone.id, clone);
+      created.push(clone.id);
+    }
+    const instanceId = idMap.get(component.id) ?? created[0];
+    if (!instanceId) return [];
+    const instance = this.doc.nodes.get(instanceId);
+    if (instance) this.insertNode(instance, parentId);
+    return [instanceId];
+  }
+
+  // -- prototype presentation ---------------------------------------------
+
+  private isInteractiveNode(node: DevNode): boolean {
+    return (node.prototype?.interactions.length ?? 0) > 0;
+  }
+
+  private subtreeNodes(rootId: string): DevNode[] {
+    return this.subtreeIds(rootId)
+      .map((id) => this.node(id))
+      .filter((node): node is DevNode => node !== null);
+  }
+
+  private firstFrame(): DevNode | null {
+    return this.orderedNodes().find((node) => node.kind === "frame") ?? null;
+  }
+
+  private presentationFrame(): DevNode | null {
+    return this.presentation ? this.node(this.presentation.frameId) : null;
+  }
+
+  private presentationOverlays(): DevNode[] {
+    if (!this.presentation) return [];
+    return this.presentation.overlays
+      .map((id) => this.node(id))
+      .filter((node): node is DevNode => node !== null);
+  }
+
+  private presentationHotspots(): PrototypeHotspot[] {
+    if (!this.presentation) return [];
+    const hotspots: PrototypeHotspot[] = [];
+    const pushFrame = (frame: DevNode | undefined): void => {
+      if (!frame) return;
+      for (const node of this.subtreeNodes(frame.id)) {
+        if (!node.visible || !this.isInteractiveNode(node)) continue;
+        hotspots.push({ node_id: node.id, rect: this.nodeBounds(node), label: node.name });
+      }
+    };
+    // Engine order: presented frame first, then open overlays (newest first).
+    pushFrame(this.presentationFrame() ?? undefined);
+    const overlays = this.presentationOverlays();
+    for (let i = overlays.length - 1; i >= 0; i -= 1) pushFrame(overlays[i]);
+    return hotspots;
+  }
+
+  private presentationState(): PrototypeState | null {
+    const session = this.presentation;
+    if (!session) return null;
+    return {
+      active: true,
+      frame_id: session.frameId,
+      frame_name: session.frameName,
+      can_back: session.history.length > 0 || session.overlays.length > 0,
+      overlay_count: session.overlays.length,
+      hotspots: this.presentationHotspots(),
+    };
+  }
+
+  private fitViewport(rect: Rect): { x: number; y: number; zoom: number } {
+    const width = this.viewport.width > 0 ? this.viewport.width : 1280;
+    const height = this.viewport.height > 0 ? this.viewport.height : 800;
+    const padding = 48;
+    const zoom = clamp(
+      Math.min((width - padding * 2) / Math.max(rect.w, 1), (height - padding * 2) / Math.max(rect.h, 1)),
+      MIN_ZOOM,
+      4,
+    );
+    return {
+      x: rect.x + rect.w / 2 - width / (2 * zoom),
+      y: rect.y + rect.h / 2 - height / (2 * zoom),
+      zoom,
+    };
+  }
+
+  private enterPresentation(frame: DevNode, overlays: string[], history: string[]): void {
+    if (!this.presentation) {
+      this.presentation = {
+        frameId: frame.id,
+        frameName: frame.name,
+        overlays,
+        history,
+        previousViewport: { ...this.viewport },
+        previousSelection: [...this.selection],
+      };
+    } else {
+      this.presentation.frameId = frame.id;
+      this.presentation.frameName = frame.name;
+      this.presentation.overlays = overlays;
+      this.presentation.history = history;
+    }
+    this.selection = [];
+    this.editing = null;
+    this.viewport = { ...this.viewport, ...this.fitViewport(this.nodeBounds(frame)) };
+    this.markFrameChanged();
+    this.status = `Presenting ${frame.name}`;
+  }
+
+  private endPresentation(): void {
+    const session = this.presentation;
+    if (!session) return;
+    this.viewport = { ...session.previousViewport };
+    this.selection = session.previousSelection.filter((id) => this.node(id) !== null);
+    this.presentation = null;
+    this.markFrameChanged();
+    this.status = "Presentation ended";
+  }
+
+  private presentationAction(action: ActionJson): void {
+    switch (action.type) {
+      case "navigate_to": {
+        const frame = this.node(action.frame_id);
+        if (!frame || frame.kind !== "frame") {
+          this.recordError("validation", "The prototype target frame no longer exists.", "warning");
+          return;
+        }
+        const history = this.presentation ? [...this.presentation.history, this.presentation.frameId] : [];
+        this.enterPresentation(frame, [], history);
+        return;
+      }
+      case "open_overlay": {
+        const frame = this.node(action.frame_id);
+        if (!frame || frame.kind !== "frame") {
+          this.recordError("validation", "The overlay frame no longer exists.", "warning");
+          return;
+        }
+        const overlays = this.presentation ? [...this.presentation.overlays, frame.id] : [frame.id];
+        this.presentation!.overlays = overlays;
+        this.markFrameChanged();
+        this.status = `Overlay ${frame.name}`;
+        return;
+      }
+      case "close_overlay": {
+        if (!this.presentation || this.presentation.overlays.length === 0) {
+          this.recordError("validation", "There is no open overlay to close.", "warning");
+          return;
+        }
+        this.presentation.overlays = this.presentation.overlays.slice(0, -1);
+        this.markFrameChanged();
+        return;
+      }
+      case "back": {
+        this.goBackPresentation();
+        return;
+      }
+      case "scroll_to":
+        this.status = "Scroll-to actions are not simulated by the dev harness.";
+        return;
+      case "set_variable": {
+        this.setVariableValue(action.variable_id, action.value);
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  private goBackPresentation(): void {
+    const session = this.presentation;
+    if (!session) return;
+    if (session.overlays.length > 0) {
+      session.overlays = session.overlays.slice(0, -1);
+      this.markFrameChanged();
+      return;
+    }
+    const previousId = session.history.pop();
+    if (!previousId) {
+      this.recordError("validation", "There is nowhere to go back to.", "warning");
+      return;
+    }
+    const frame = this.node(previousId);
+    if (!frame || frame.kind !== "frame") return;
+    session.frameId = frame.id;
+    session.frameName = frame.name;
+    this.viewport = { ...this.viewport, ...this.fitViewport(this.nodeBounds(frame)) };
+    this.markFrameChanged();
+    this.status = `Presenting ${frame.name}`;
+  }
+
+  private setVariableValue(variableId: string, value: number | string | VariableValueJson): void {
+    const found = this.findVariable(variableId);
+    if (!found || !this.doc) {
+      this.recordError("validation", "Unknown variable", "warning");
+      return;
+    }
+    const modeId = this.activeModeOf(found.collection);
+    if (!modeId) {
+      this.recordError("validation", "The variable collection has no modes", "warning");
+      return;
+    }
+    let next: VariableValueJson;
+    if (typeof value === "number") next = { type: "float", value };
+    else if (typeof value === "string") {
+      const color = parseHexColor(value);
+      next = color ? { type: "color", color } : { type: "string", value };
+    } else next = value;
+    found.variable.values = { ...found.variable.values, [modeId]: next };
+    this.markMutated();
+  }
+
+  private clickPresentation(world: { x: number; y: number }): void {
+    const hotspots = this.presentationHotspots();
+    for (let i = hotspots.length - 1; i >= 0; i -= 1) {
+      const hotspot = hotspots[i];
+      if (!hotspot) continue;
+      const rect = hotspot.rect;
+      const inside =
+        world.x >= rect.x && world.x <= rect.x + rect.w && world.y >= rect.y && world.y <= rect.y + rect.h;
+      if (!inside) continue;
+      const node = this.node(hotspot.node_id);
+      const interaction = node?.prototype?.interactions.find(
+        (candidate) => candidate.trigger.type === "click" || candidate.trigger.type === "press",
+      );
+      if (interaction) {
+        for (const action of interaction.actions) this.presentationAction(action);
+        return;
+      }
+    }
+    this.status = "No prototype hotspot here";
+  }
+
+
 
   private buildDemoDocument(): DevDocument {
     const pageA: DevPage = { id: newId("page"), name: "Page 1", roots: [] };
@@ -768,6 +1137,69 @@ export class DevTransport implements EngineTransport {
     });
     darkFrame.children.push(nightDot.id);
 
+    // Prototype: clicking "Orbit" navigates to the Night icon frame so the
+    // presentation layer has real hotspot data in the browser harness.
+    circle.prototype = {
+      interactions: [
+        {
+          id: "int_demo_navigate",
+          trigger: { type: "click", delay_ms: 0 },
+          actions: [{ type: "navigate_to", frame_id: darkFrame.id }],
+        },
+      ],
+    };
+    nightDot.prototype = {
+      interactions: [
+        {
+          id: "int_demo_back",
+          trigger: { type: "click", delay_ms: 0 },
+          actions: [{ type: "back" }],
+        },
+      ],
+    };
+
+    // Design-system demo data: one collection with two modes and two
+    // variables; the first swatch is bound to the colour variable so mode
+    // switching visibly changes the canvas.
+    const modeOne = newId("mode");
+    const modeTwo = newId("mode");
+    const coralVariable: VariableEntry = {
+      id: newId("var"),
+      name: "Brand coral",
+      resolved_type: "color",
+      values: {
+        [modeOne]: { type: "color", color: CORAL },
+        [modeTwo]: { type: "color", color: { r: 0.36, g: 0.47, b: 1, a: 1 } },
+      },
+    };
+    const radiusVariable: VariableEntry = {
+      id: newId("var"),
+      name: "Corner radius",
+      resolved_type: "float",
+      values: {
+        [modeOne]: { type: "float", value: 16 },
+        [modeTwo]: { type: "float", value: 4 },
+      },
+    };
+    doc.variables = [
+      {
+        id: newId("coll"),
+        name: "Theme",
+        modes: [
+          { id: modeOne, name: "Mode 1" },
+          { id: modeTwo, name: "Mode 2" },
+        ],
+        active_mode_id: null,
+        variables: [coralVariable, radiusVariable],
+      },
+    ];
+    const firstSwatch = doc.nodes.get(board.children[0] ?? "");
+    if (firstSwatch) {
+      firstSwatch.fills = [
+        { ...makeFill(CORAL), variable_id: coralVariable.id },
+      ];
+    }
+
     this.revision = 1;
     this.frameId = 1;
     this.dirty = false;
@@ -823,7 +1255,7 @@ export class DevTransport implements EngineTransport {
         export_scope: true,
         import_svg: false,
         import_image: false,
-        prototype: false,
+        prototype: true,
         canvas_text_edit: true,
       },
     });
@@ -1091,6 +1523,7 @@ export class DevTransport implements EngineTransport {
         .filter((node): node is DevNode => node !== null)
         .map((node) => this.detailOf(node)),
       text_edit: this.buildTextEditState(),
+      prototype: this.presentationState(),
       errors: [...this.errors],
       status: this.status,
     };
@@ -1118,6 +1551,7 @@ export class DevTransport implements EngineTransport {
       layout: null,
       constraints: null,
       component: node.component ? deepClone(node.component) : null,
+      prototype: node.prototype ? deepClone(node.prototype) : null,
       is_inside_instance: false,
       absolute_bounds: this.nodeBounds(node),
       resolved: null,
@@ -1159,7 +1593,7 @@ export class DevTransport implements EngineTransport {
       nodes,
       styles: deepClone(this.doc.styles),
       components: deepClone(this.doc.components),
-      variables: [],
+      variables: deepClone(this.doc.variables),
     };
   }
 
@@ -1290,6 +1724,15 @@ export class DevTransport implements EngineTransport {
   // -- pointer interaction -------------------------------------------------
 
   private pointerDown(input: PointerInput, world: { x: number; y: number }): void {
+    if (this.presentation) {
+      this.presentationPointer = {
+        x: input.screen_x,
+        y: input.screen_y,
+        worldX: world.x,
+        worldY: world.y,
+      };
+      return;
+    }
     this.hover = this.hitTest(world);
     if (this.editing) {
       this.setCaretFromWorld(world);
@@ -1364,6 +1807,11 @@ export class DevTransport implements EngineTransport {
   }
 
   private pointerMove(input: PointerInput, world: { x: number; y: number }): void {
+    if (this.presentation) {
+      void input;
+      void world;
+      return;
+    }
     if (this.drag.mode === "none") {
       this.hover = this.hitTest(world);
       return;
@@ -1419,6 +1867,15 @@ export class DevTransport implements EngineTransport {
   }
 
   private pointerUp(world: { x: number; y: number }): void {
+    if (this.presentation) {
+      const start = this.presentationPointer;
+      this.presentationPointer = null;
+      const moved = start ? Math.hypot(world.x - start.worldX, world.y - start.worldY) : 0;
+      if (!start || moved <= 6 / Math.max(this.viewport.zoom, 0.01)) {
+        this.clickPresentation(world);
+      }
+      return;
+    }
     const mode = this.drag.mode;
     if (mode === "marquee") {
       const marquee = this.marquee;
@@ -1777,15 +2234,68 @@ export class DevTransport implements EngineTransport {
         return this.finish();
       }
       case "create_component": {
-        this.wrapSelection("component");
+        const typed = args as CommandArgs["create_component"];
+        this.wrapSelection("component", typed?.name);
         return this.finish();
       }
       case "create_component_set": {
         return this.unsupported("Component sets are not simulated by the dev harness.");
       }
-      case "detach_instance":
+      case "detach_instance": {
+        this.detachInstances();
+        return this.finish();
+      }
       case "swap_instance": {
-        return this.unsupported("Instances are not simulated by the dev harness.");
+        return this.unsupported("Swapping instances is not simulated by the dev harness.");
+      }
+      case "add_interaction": {
+        this.attachInteraction(args as CommandArgs["add_interaction"]);
+        return this.finish();
+      }
+      case "remove_interaction": {
+        this.removeInteraction(args as CommandArgs["remove_interaction"]);
+        return this.finish();
+      }
+      case "place_instance": {
+        this.placeInstance(args as CommandArgs["place_instance"]);
+        return this.finish();
+      }
+      case "create_style_from_node": {
+        this.createStyleFromNode(args as CommandArgs["create_style_from_node"]);
+        return this.finish();
+      }
+      case "apply_style": {
+        this.applyStyle(args as CommandArgs["apply_style"]);
+        return this.finish();
+      }
+      case "rename_style": {
+        this.renameStyle(args as CommandArgs["rename_style"]);
+        return this.finish();
+      }
+      case "delete_style": {
+        this.deleteStyle(args as CommandArgs["delete_style"]);
+        return this.finish();
+      }
+      case "create_variable_collection": {
+        this.createVariableCollection((args as CommandArgs["create_variable_collection"]).name);
+        return this.finish();
+      }
+      case "create_color_variable": {
+        this.createColorVariable(args as CommandArgs["create_color_variable"]);
+        return this.finish();
+      }
+      case "create_float_variable": {
+        this.createFloatVariable(args as CommandArgs["create_float_variable"]);
+        return this.finish();
+      }
+      case "set_variable_value": {
+        const typed = args as CommandArgs["set_variable_value"];
+        this.setVariableValue(typed.variable_id, typed.value);
+        return this.finish();
+      }
+      case "set_active_mode": {
+        this.setActiveMode(args as CommandArgs["set_active_mode"]);
+        return this.finish();
       }
       case "bring_to_front":
       case "bring_forward":
@@ -1833,6 +2343,10 @@ export class DevTransport implements EngineTransport {
       case "set_viewport": {
         const typed = args as CommandArgs["set_viewport"];
         this.viewport = { ...this.viewport, width: typed.width, height: typed.height, dpr: typed.dpr };
+        if (this.presentation) {
+          const frame = this.presentationFrame();
+          if (frame) this.viewport = { ...this.viewport, ...this.fitViewport(this.nodeBounds(frame)) };
+        }
         this.markFrameChanged();
         return this.finish();
       }
@@ -2128,7 +2642,7 @@ export class DevTransport implements EngineTransport {
     this.status = "Ungrouped";
   }
 
-  private wrapSelection(kind: "component"): void {
+  private wrapSelection(kind: "component", requestedName?: string): void {
     if (!this.doc) return;
     if (this.selection.length === 0) {
       this.recordError("validation", "Select a layer first.", "warning");
@@ -2150,8 +2664,9 @@ export class DevTransport implements EngineTransport {
     if (!bounds) return;
     this.pushHistory();
     const parentId = selected[0]?.parent ?? null;
+    const componentName = requestedName?.trim() || "Component";
     const wrapper = this.createNode({
-      name: "Component",
+      name: componentName,
       kind,
       rect: bounds,
       page: page.id,
@@ -2168,10 +2683,295 @@ export class DevTransport implements EngineTransport {
       node.parent = wrapper.id;
       wrapper.children.push(node.id);
     }
-    this.doc.components = [...this.doc.components, { node_id: wrapper.id, name: wrapper.name, kind }];
+    const componentId = `component_${++this.componentSeq}`;
+    wrapper.component = {
+      type: "component",
+      key: componentId,
+      description: "",
+      variant_properties: {},
+    };
+    this.doc.components = [
+      ...this.doc.components,
+      { node_id: wrapper.id, component_id: componentId, name: componentName, kind },
+    ];
     this.select([wrapper.id]);
     this.markMutated();
     this.status = "Component created";
+  }
+
+  // -- design-system commands ----------------------------------------------
+
+  private attachInteraction(args: CommandArgs["add_interaction"]): void {
+    const nodeId = args.node_id ?? this.selection[0];
+    const node = nodeId ? this.node(nodeId) : null;
+    if (!node) {
+      this.recordError("validation", "Select a layer to attach the interaction to.", "warning");
+      return;
+    }
+    if (!args || !args.trigger || typeof args.trigger.type !== "string") {
+      this.recordError("validation", "Choose a trigger for the interaction.", "warning");
+      return;
+    }
+    const actions = Array.isArray(args.actions) ? args.actions : args.actions ? [args.actions] : [];
+    if (actions.length === 0) {
+      this.recordError("validation", "Add at least one action to the interaction.", "warning");
+      return;
+    }
+    this.pushHistory();
+    const interaction: InteractionJson = {
+      id: `int_${++this.interactionSeq}`,
+      trigger: deepClone(args.trigger),
+      actions: deepClone(actions),
+    };
+    node.prototype = {
+      interactions: [...(node.prototype?.interactions ?? []), interaction],
+    };
+    this.markMutated();
+    this.status = "Interaction added";
+  }
+
+  private removeInteraction(args: CommandArgs["remove_interaction"]): void {
+    const nodeId = args.node_id ?? this.selection[0];
+    const node = nodeId ? this.node(nodeId) : null;
+    if (!node?.prototype) {
+      this.recordError("validation", "This layer has no interactions.", "warning");
+      return;
+    }
+    this.pushHistory();
+    node.prototype = {
+      interactions: node.prototype.interactions.filter(
+        (interaction) => interaction.id !== args.interaction_id,
+      ),
+    };
+    this.markMutated();
+    this.status = "Interaction removed";
+  }
+
+  private placeInstance(args: CommandArgs["place_instance"]): void {
+    if (!this.doc) return;
+    const component = this.componentNode(args.component_id);
+    if (!component) {
+      this.recordError("validation", "Unknown component.", "warning");
+      return;
+    }
+    this.pushHistory();
+    const created = this.createInstanceFrom(
+      component,
+      args.x,
+      args.y,
+      args.parent_id ?? null,
+    );
+    if (created.length === 0) {
+      this.recordError("validation", "The component is empty.", "warning");
+      return;
+    }
+    this.select(created);
+    this.markMutated();
+    this.status = `Inserted ${component.name} instance`;
+  }
+
+  private detachInstances(): void {
+    const instances = this.selection
+      .map((id) => this.node(id))
+      .filter((node): node is DevNode => node !== null);
+    const targets = instances.filter((node) => node.kind === "instance");
+    if (targets.length === 0) {
+      this.recordError("validation", "Select a component instance to detach.", "warning");
+      return;
+    }
+    this.pushHistory();
+    for (const node of targets) {
+      node.kind = "frame";
+      node.component = null;
+      node.name = node.name.replace(/ instance$/i, "") || "Frame";
+    }
+    this.markMutated();
+    this.status = "Instance detached";
+  }
+
+  private createStyleFromNode(args: CommandArgs["create_style_from_node"]): void {
+    if (!this.doc) return;
+    const target = args?.node_id ? this.node(args.node_id) : this.selection[0] ? this.node(this.selection[0]) : null;
+    if (!target) {
+      this.recordError("validation", "Select a layer to create a style from.", "warning");
+      return;
+    }
+    const name = args?.name?.trim() || target.name;
+    const id = newId("style");
+    this.pushHistory();
+    if (target.text) {
+      this.doc.styles.texts = [...this.doc.styles.texts, { id, name }];
+      this.textStyleData.set(id, deepClone(target.text.style));
+    } else if (target.fills[0]) {
+      this.doc.styles.paints = [...this.doc.styles.paints, { id, name }];
+      this.paintStyleData.set(id, deepClone(target.fills[0]));
+    } else if (target.effects.length > 0) {
+      this.doc.styles.effects = [...this.doc.styles.effects, { id, name }];
+      this.effectStyleData.set(id, deepClone(target.effects));
+    } else {
+      this.recordError(
+        "validation",
+        "The layer has no fill, text or effect to turn into a style.",
+        "warning",
+      );
+      return;
+    }
+    this.markMutated();
+    this.status = `Style "${name}" created`;
+  }
+
+  private applyStyle(args: CommandArgs["apply_style"]): void {
+    if (!this.doc) return;
+    const ids = args.ids && args.ids.length > 0 ? args.ids : this.selection;
+    if (ids.length === 0) {
+      this.recordError("validation", "Select a layer to apply the style to.", "warning");
+      return;
+    }
+    const nodes = ids.map((id) => this.node(id)).filter((node): node is DevNode => node !== null);
+    const paint = this.paintStyleData.get(args.style_id);
+    const text = this.textStyleData.get(args.style_id);
+    const effects = this.effectStyleData.get(args.style_id);
+    if (!paint && !text && !effects) {
+      this.recordError("validation", "Unknown style.", "warning");
+      return;
+    }
+    this.pushHistory();
+    for (const node of nodes) {
+      if (paint) this.applyStylePaint(args.style_id, node);
+      if (text && node.text) node.text.style = deepClone(text);
+      if (effects) node.effects = deepClone(effects);
+    }
+    this.markMutated();
+    this.status = "Style applied";
+  }
+
+  private renameStyle(args: CommandArgs["rename_style"]): void {
+    if (!this.doc) return;
+    const name = args.name.trim();
+    if (!name) {
+      this.recordError("validation", "Style names cannot be empty.", "warning");
+      return;
+    }
+    const entry = [
+      ...this.doc.styles.paints,
+      ...this.doc.styles.texts,
+      ...this.doc.styles.effects,
+    ].find((style) => style.id === args.style_id);
+    if (!entry) {
+      this.recordError("validation", "Unknown style.", "warning");
+      return;
+    }
+    this.pushHistory();
+    entry.name = name;
+    this.markMutated();
+    this.status = "Style renamed";
+  }
+
+  private deleteStyle(args: CommandArgs["delete_style"]): void {
+    if (!this.doc) return;
+    const present =
+      this.doc.styles.paints.some((style) => style.id === args.style_id) ||
+      this.doc.styles.texts.some((style) => style.id === args.style_id) ||
+      this.doc.styles.effects.some((style) => style.id === args.style_id);
+    if (!present) {
+      this.recordError("validation", "Unknown style.", "warning");
+      return;
+    }
+    this.pushHistory();
+    this.doc.styles.paints = this.doc.styles.paints.filter((style) => style.id !== args.style_id);
+    this.doc.styles.texts = this.doc.styles.texts.filter((style) => style.id !== args.style_id);
+    this.doc.styles.effects = this.doc.styles.effects.filter((style) => style.id !== args.style_id);
+    this.paintStyleData.delete(args.style_id);
+    this.textStyleData.delete(args.style_id);
+    this.effectStyleData.delete(args.style_id);
+    this.markMutated();
+    this.status = "Style deleted";
+  }
+
+  private createVariableCollection(name: string): void {
+    if (!this.doc) return;
+    const collection: VariableCollectionEntry = {
+      id: `collection_${++this.variableSeq}`,
+      name: name.trim() || `Collection ${this.doc.variables.length + 1}`,
+      modes: [{ id: `mode_${++this.variableSeq}`, name: "Mode 1" }],
+      active_mode_id: null,
+      variables: [],
+    };
+    this.pushHistory();
+    this.doc.variables = [...this.doc.variables, collection];
+    this.markMutated();
+    this.status = `Collection "${collection.name}" created`;
+  }
+
+  private variableCollectionFor(nameOrId: string | undefined): VariableCollectionEntry | null {
+    const collections = this.doc?.variables ?? [];
+    if (!nameOrId) return collections[0] ?? null;
+    return (
+      collections.find((collection) => collection.id === nameOrId) ??
+      collections.find((collection) => collection.name === nameOrId) ??
+      null
+    );
+  }
+
+  private createColorVariable(args: CommandArgs["create_color_variable"]): void {
+    const collection = this.variableCollectionFor(args.collection);
+    if (!collection) {
+      this.recordError("validation", "Create a variable collection first.", "warning");
+      return;
+    }
+    const color = parseHexColor(args.color);
+    if (!color) {
+      this.recordError("validation", "Enter a colour like #FF6B4A.", "warning");
+      return;
+    }
+    const modeId = collection.modes[0]?.id;
+    if (!modeId) return;
+    const variable: VariableEntry = {
+      id: `var_${++this.variableSeq}`,
+      name: args.name.trim() || "Color",
+      resolved_type: "color",
+      values: { [modeId]: { type: "color", color } },
+    };
+    this.pushHistory();
+    collection.variables = [...(collection.variables ?? []), variable];
+    this.markMutated();
+    this.status = `Variable "${variable.name}" created`;
+  }
+
+  private createFloatVariable(args: CommandArgs["create_float_variable"]): void {
+    const collection = this.variableCollectionFor(args.collection);
+    if (!collection) {
+      this.recordError("validation", "Create a variable collection first.", "warning");
+      return;
+    }
+    const modeId = collection.modes[0]?.id;
+    if (!modeId) return;
+    const variable: VariableEntry = {
+      id: `var_${++this.variableSeq}`,
+      name: args.name.trim() || "Number",
+      resolved_type: "float",
+      values: { [modeId]: { type: "float", value: Number.isFinite(args.value) ? args.value : 0 } },
+    };
+    this.pushHistory();
+    collection.variables = [...(collection.variables ?? []), variable];
+    this.markMutated();
+    this.status = `Variable "${variable.name}" created`;
+  }
+
+  private setActiveMode(args: CommandArgs["set_active_mode"]): void {
+    const collection = this.doc?.variables.find((entry) => entry.id === args.collection_id);
+    if (!collection) {
+      this.recordError("validation", "Unknown variable collection.", "warning");
+      return;
+    }
+    if (!collection.modes.some((mode) => mode.id === args.mode_id)) {
+      this.recordError("validation", "Unknown variable mode.", "warning");
+      return;
+    }
+    this.pushHistory();
+    collection.active_mode_id = args.mode_id;
+    this.markMutated();
+    this.status = "Variable mode changed";
   }
 
   private reorderSelection(name: string): void {
@@ -2475,7 +3275,24 @@ export class DevTransport implements EngineTransport {
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, -x * zoom * dpr, -y * zoom * dpr);
     void width;
     void height;
+    if (this.presentation) {
+      this.drawPresentation(ctx);
+      return;
+    }
     this.drawPage(ctx, null);
+  }
+
+  /** Presentation renders the frame (and any open overlays) without editor chrome. */
+  private drawPresentation(ctx: CanvasRenderingContext2D): void {
+    const frame = this.presentationFrame();
+    if (frame) {
+      // Paint the frame and its descendants, then overlays on top.
+      const host = this.node(frame.id);
+      if (host) this.drawNode(ctx, host, 1);
+    }
+    for (const overlay of this.presentationOverlays()) {
+      this.drawNode(ctx, overlay, 1);
+    }
   }
 
   private drawPage(ctx: CanvasRenderingContext2D, onlyIds: string[] | null): void {
@@ -2523,7 +3340,7 @@ export class DevTransport implements EngineTransport {
       this.paintFill(ctx, fill);
     } else if (node.kind === "star" || node.kind === "polygon") {
       const fill = node.fills.find((candidate) => candidate.visible);
-      this.drawPolygon(ctx, rect.w, rect.h, node.kind === "star" ? 5 : 6, fetchColor(fill?.paint), node.kind === "star");
+      this.drawPolygon(ctx, rect.w, rect.h, node.kind === "star" ? 5 : 6, this.resolveFillColor(fill), node.kind === "star");
     } else if (node.kind === "line") {
       ctx.strokeStyle = this.strokeColor(node) ?? "#e9ecf2";
       ctx.lineWidth = node.strokes[0]?.weight ?? 2;
@@ -2603,7 +3420,7 @@ export class DevTransport implements EngineTransport {
     radius: number,
     fill: Fill,
   ): void {
-    const color = fetchColor(fill.paint);
+    const color = this.resolveFillColor(fill);
     if (!color) {
       ctx.fillStyle = "#3a4250";
       this.roundRectPath(ctx, 0, 0, w, h, radius);
@@ -2619,7 +3436,7 @@ export class DevTransport implements EngineTransport {
   }
 
   private paintFill(ctx: CanvasRenderingContext2D, fill: Fill | undefined): void {
-    const color = fetchColor(fill?.paint);
+    const color = this.resolveFillColor(fill);
     ctx.fillStyle = color ?? "#3a4250";
     ctx.fill();
   }
@@ -2754,6 +3571,593 @@ export class DevTransport implements EngineTransport {
     return parts.join("\n");
   }
 
+  // -- Dev Mode ------------------------------------------------------------
+
+  private colorHex(color: Color | null | undefined): string | null {
+    if (!color) return null;
+    const channel = (value: number): string =>
+      Math.round(clamp(value, 0, 1) * 255)
+        .toString(16)
+        .padStart(2, "0");
+    const alpha = channel(color.a);
+    const hex = `#${channel(color.r)}${channel(color.g)}${channel(color.b)}${alpha === "ff" ? "" : alpha}`;
+    return hex.toUpperCase();
+  }
+
+  private variableName(id: string | null): string | null {
+    if (!id) return null;
+    return this.doc?.variables.find((collection) => collection.id === id)?.name ?? null;
+  }
+
+  private gradientStops(paint: Paint): GradientStopInfo[] {
+    if (paint.type === "solid" || paint.type === "image") return [];
+    return paint.stops.map((stop) => ({
+      position: stop.position,
+      color: stop.color,
+      hex: this.colorHex(stop.color) ?? "#000000",
+    }));
+  }
+
+  private paintInfo(
+    paint: Paint,
+    meta: { opacity: number; blend: BlendMode; style_id: string | null; variable_id: string | null },
+  ): PaintInfo {
+    return {
+      kind: paint.type,
+      color: paint.type === "solid" ? paint.color : null,
+      hex: paint.type === "solid" ? this.colorHex(paint.color) : null,
+      stops: this.gradientStops(paint),
+      opacity: meta.opacity,
+      blend: meta.blend,
+      style_id: meta.style_id,
+      variable_id: meta.variable_id,
+      variable_name: this.variableName(meta.variable_id),
+    };
+  }
+
+  private fillPaintInfo(fill: Fill): PaintInfo {
+    return this.paintInfo(fill.paint, {
+      opacity: fill.opacity,
+      blend: fill.blend,
+      style_id: fill.style_id,
+      variable_id: fill.variable_id,
+    });
+  }
+
+  private strokeInfo(stroke: Stroke): DevStrokeInfo {
+    return {
+      paint: this.paintInfo(stroke.paint, {
+        opacity: stroke.opacity,
+        blend: stroke.blend,
+        style_id: stroke.style_id,
+        variable_id: stroke.variable_id,
+      }),
+      weight: stroke.weight,
+      align: stroke.align,
+      cap: stroke.cap,
+      join: stroke.join,
+      miter_limit: stroke.miter_limit,
+      dash: stroke.dash,
+    };
+  }
+
+  private effectInfo(effect: Effect): DevEffectInfo {
+    if (effect.type === "drop_shadow" || effect.type === "inner_shadow") {
+      return {
+        kind: effect.type,
+        color: effect.color,
+        offset: [effect.offset.x, effect.offset.y],
+        blur: effect.blur,
+        spread: effect.spread,
+        blend: effect.blend,
+      };
+    }
+    if ("radius" in effect) {
+      return {
+        kind: effect.type,
+        color: null,
+        offset: null,
+        blur: effect.radius,
+        spread: 0,
+        blend: null,
+      };
+    }
+    return { kind: effect.type, color: null, offset: null, blur: 0, spread: 0, blend: null };
+  }
+
+  private textInfo(node: DevNode): DevTextInfo | null {
+    if (!node.text) return null;
+    const style = node.text.style;
+    const fill = style.fills[0];
+    return {
+      characters: node.text.characters,
+      font_family: style.font_family,
+      font_size: style.font_size,
+      font_weight: style.font_weight,
+      italic: style.italic,
+      line_height:
+        style.line_height.unit === "auto"
+          ? Number((style.font_size * 1.2).toFixed(2))
+          : style.line_height.value,
+      letter_spacing: style.letter_spacing,
+      align: node.text.paragraph.align,
+      vertical_align: node.text.paragraph.vertical_align,
+      color: fill && fill.paint.type === "solid" ? fill.paint.color : null,
+      overflow: node.text.auto_size === "none",
+    };
+  }
+
+  private componentInfo(node: DevNode): DevComponentInfo | null {
+    const role = node.component;
+    if (!role) return null;
+    if (role.type === "instance") {
+      const component = this.doc?.components.find(
+        (entry) => entry.node_id === role.component_id,
+      );
+      return {
+        role: role.type,
+        component_id: role.component_id,
+        component_name: component?.name ?? null,
+        override_count: role.overrides.length,
+        inside_instance: false,
+      };
+    }
+    const main = this.doc?.components.find((entry) => entry.node_id === node.id);
+    return {
+      role: role.type,
+      component_id: null,
+      component_name: main?.name ?? node.name,
+      override_count: 0,
+      inside_instance: false,
+    };
+  }
+
+  private inspectNode(node: DevNode): NodeInspect {
+    const bounds = this.nodeBounds(node);
+    const page = this.pageOf(node);
+    const parent = node.parent ? this.node(node.parent) : null;
+    const localPosition: [number, number] = parent
+      ? [node.transform.x - parent.transform.x, node.transform.y - parent.transform.y]
+      : [node.transform.x, node.transform.y];
+    const radians = (node.transform.rotation * Math.PI) / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const variableRefs = new Set<string>();
+    const styleRefs = new Set<string>();
+    for (const fill of node.fills) {
+      if (fill.variable_id) variableRefs.add(fill.variable_id);
+      if (fill.style_id) styleRefs.add(fill.style_id);
+    }
+    for (const stroke of node.strokes) {
+      if (stroke.variable_id) variableRefs.add(stroke.variable_id);
+      if (stroke.style_id) styleRefs.add(stroke.style_id);
+    }
+    return {
+      id: node.id,
+      name: node.name,
+      kind: node.kind,
+      page: page?.name ?? "",
+      parent: node.parent,
+      children: [...node.children],
+      bounds: [bounds.x, bounds.y, bounds.w, bounds.h],
+      size: [node.transform.w, node.transform.h],
+      local_position: localPosition,
+      rotation: node.transform.rotation,
+      flip: [node.transform.flip_x, node.transform.flip_y],
+      opacity: node.opacity,
+      blend: node.blend,
+      visible: node.visible,
+      locked: node.locked,
+      matrix: [
+        cos,
+        sin,
+        -sin,
+        cos,
+        node.transform.x + node.transform.w / 2 - (cos * node.transform.w) / 2 + (sin * node.transform.h) / 2,
+        node.transform.y + node.transform.h / 2 - (sin * node.transform.w) / 2 - (cos * node.transform.h) / 2,
+      ],
+      fills: node.fills.filter((fill) => fill.visible).map((fill) => this.fillPaintInfo(fill)),
+      strokes: node.strokes.filter((stroke) => stroke.visible).map((stroke) => this.strokeInfo(stroke)),
+      effects: node.effects.map((effect) => this.effectInfo(effect)),
+      corner_radii: [node.corner_radii.tl, node.corner_radii.tr, node.corner_radii.br, node.corner_radii.bl],
+      layout_direction: null,
+      layout_gap: null,
+      layout_padding: null,
+      layout_sizing: null,
+      constraints: null,
+      text: this.textInfo(node),
+      component: this.componentInfo(node),
+      variable_refs: [...variableRefs].sort(),
+      style_refs: [...styleRefs].sort(),
+    };
+  }
+
+  setDevMode(enabled: boolean): Promise<EngineState> {
+    this.status = enabled ? "Dev Mode: select a layer to inspect" : "Design mode";
+    return Promise.resolve(this.finish());
+  }
+
+  devInspect(): Promise<InspectSnapshot> {
+    if (!this.doc) return Promise.reject(new Error("no document is open"));
+    const nodes = this.selection
+      .map((id) => this.node(id))
+      .filter((node): node is DevNode => node !== null)
+      .map((node) => this.inspectNode(node));
+    const union = unionRects(
+      nodes.map((node) => ({
+        x: node.bounds[0],
+        y: node.bounds[1],
+        w: node.bounds[2],
+        h: node.bounds[3],
+      })),
+    );
+    const warnings: string[] = [];
+    if (this.selection.length === 0) {
+      warnings.push("No layers selected — select a layer on the canvas or in the Layers panel to inspect it.");
+    } else if (nodes.some((node) => node.kind === "frame")) {
+      warnings.push("Auto layout and constraints are not simulated by the browser harness; those fields are omitted.");
+    }
+    this.handoff = { ...this.handoff, revision: this.revision };
+    return Promise.resolve({
+      nodes,
+      bounds: union ? [union.x, union.y, union.w, union.h] : null,
+      total_size: union ? [union.w, union.h] : [0, 0],
+      warnings,
+    });
+  }
+
+  private static sanitizeName(value: string, fallback: string): string {
+    const cleaned = value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return cleaned.length > 0 ? cleaned : fallback;
+  }
+
+  private static nodeCssColor(node: DevNode): string | null {
+    const color = DevTransport.nodeSolidColor(node);
+    if (!color) return null;
+    return `rgba(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)}, ${color.a})`;
+  }
+
+  private static nodeSolidColor(node: DevNode): Color | null {
+    const fill = node.fills.find((item) => item.visible && item.paint.type === "solid");
+    if (!fill || fill.paint.type !== "solid") return null;
+    return fill.paint.color;
+  }
+
+  private static argbHex(color: Color): string {
+    const channel = (value: number): string =>
+      Math.round(clamp(value, 0, 1) * 255)
+        .toString(16)
+        .padStart(2, "0");
+    return `${channel(color.a)}${channel(color.r)}${channel(color.g)}${channel(color.b)}`.toUpperCase();
+  }
+
+  devCodegen(target: CodegenTarget, precision?: number): Promise<GeneratedCode> {
+    if (!this.doc) return Promise.reject(new Error("no document is open"));
+    const nodes = this.selection
+      .map((id) => this.node(id))
+      .filter((node): node is DevNode => node !== null);
+    if (nodes.length === 0) {
+      return Promise.reject(new Error("select at least one node on the current page to generate code"));
+    }
+    const digits = clamp(Math.round(precision ?? 2), 0, 4);
+    const round = (value: number): number => Number(value.toFixed(digits));
+    const union = unionRects(nodes.map((node) => this.nodeBounds(node)));
+    if (!union) return Promise.reject(new Error("selection has no measurable bounds"));
+    const originX = union.x;
+    const originY = union.y;
+    const warnings = [
+      "Generated by the browser dev harness — verify against the real engine before use.",
+      "This is a static starting point, not production code.",
+      "Auto layout, constraints and prototype data are not simulated here.",
+    ];
+    if (nodes.some((node) => node.text)) {
+      warnings.push("Text styles are approximated from the current font settings.");
+    }
+    const language: Record<GeneratedCodeTarget, string> = {
+      css: "css",
+      react_type_script: "typescript",
+      swift_ui: "swift",
+      compose: "kotlin",
+    };
+    const extension: Record<GeneratedCodeTarget, string> = {
+      css: "css",
+      react_type_script: "tsx",
+      swift_ui: "swift",
+      compose: "kt",
+    };
+    const targetKey: Record<CodegenTarget, GeneratedCodeTarget> = {
+      css: "css",
+      react: "react_type_script",
+      swiftui: "swift_ui",
+      compose: "compose",
+    };
+    const lines: string[] = [];
+    if (target === "css") {
+      lines.push("/* Generated by Icon Crafter Dev Mode (browser harness) */");
+      lines.push(".icon-crafter-generated {");
+      lines.push("  position: relative;");
+      lines.push(`  width: ${round(union.w)}px;`);
+      lines.push(`  height: ${round(union.h)}px;`);
+      lines.push("}");
+      nodes.forEach((node, index) => {
+        const name = DevTransport.sanitizeName(node.name, `layer-${index + 1}`);
+        const rect = this.nodeBounds(node);
+        lines.push("");
+        lines.push(`.${name} {`);
+        lines.push("  position: absolute;");
+        lines.push(`  left: ${round(rect.x - originX)}px;`);
+        lines.push(`  top: ${round(rect.y - originY)}px;`);
+        lines.push(`  width: ${round(rect.w)}px;`);
+        lines.push(`  height: ${round(rect.h)}px;`);
+        const color = DevTransport.nodeCssColor(node);
+        if (color) lines.push(`  background: ${color};`);
+        if (node.opacity < 1) lines.push(`  opacity: ${round(node.opacity)};`);
+        if (node.transform.rotation !== 0) lines.push(`  transform: rotate(${round(node.transform.rotation)}deg);`);
+        const radius = node.corner_radii;
+        if (radius.tl || radius.tr || radius.br || radius.bl) {
+          lines.push(
+            `  border-radius: ${round(radius.tl)}px ${round(radius.tr)}px ${round(radius.br)}px ${round(radius.bl)}px;`,
+          );
+        }
+        if (node.text) {
+          lines.push(`  font-family: "${node.text.style.font_family}", sans-serif;`);
+          lines.push(`  font-size: ${round(node.text.style.font_size)}px;`);
+          lines.push(`  font-weight: ${node.text.style.font_weight};`);
+        }
+        lines.push("}");
+      });
+    } else if (target === "react") {
+      lines.push("// Generated by Icon Crafter Dev Mode (browser harness)");
+      lines.push("import type { CSSProperties } from \"react\";");
+      lines.push("");
+      lines.push("export function IconCrafterSelection(): JSX.Element {");
+      lines.push("  return (");
+      lines.push("    <div");
+      lines.push("      style={{");
+      lines.push("        position: \"relative\",");
+      lines.push(`        width: ${round(union.w)},`);
+      lines.push(`        height: ${round(union.h)},`);
+      lines.push("      }}");
+      lines.push("    >");
+      nodes.forEach((node) => {
+        const rect = this.nodeBounds(node);
+        const color = DevTransport.nodeCssColor(node);
+        const styles = [
+          `left: ${round(rect.x - originX)}`,
+          `top: ${round(rect.y - originY)}`,
+          `width: ${round(rect.w)}`,
+          `height: ${round(rect.h)}`,
+        ];
+        if (color) styles.push(`background: ${JSON.stringify(color)}`);
+        if (node.opacity < 1) styles.push(`opacity: ${round(node.opacity)}`);
+        if (node.transform.rotation !== 0) styles.push(`transform: "rotate(${round(node.transform.rotation)}deg)"`);
+        lines.push(`      {/* ${node.name.replace(/\*\//g, "* /")} */}`);
+        lines.push(`      <div style={{ position: "absolute", ${styles.join(", ")} }}>`);
+        if (node.text) {
+          lines.push(`        {${JSON.stringify(node.text.characters)}}`);
+        }
+        lines.push("      </div>");
+      });
+      lines.push("    </div>");
+      lines.push("  );");
+      lines.push("}");
+    } else if (target === "swiftui") {
+      lines.push("// Generated by Icon Crafter Dev Mode (browser harness)");
+      lines.push("import SwiftUI");
+      lines.push("");
+      lines.push("struct GeneratedSelection: View {");
+      lines.push("  var body: some View {");
+      lines.push("    ZStack(alignment: .topLeading) {");
+      nodes.forEach((node) => {
+        const rect = this.nodeBounds(node);
+        const solid = DevTransport.nodeSolidColor(node);
+        const fill = solid
+          ? `Color(red: ${solid.r.toFixed(3)}, green: ${solid.g.toFixed(3)}, blue: ${solid.b.toFixed(3)}, opacity: ${solid.a.toFixed(3)})`
+          : "Color.clear";
+        if (node.kind === "ellipse") {
+          lines.push(
+            `      Ellipse().fill(${fill}).frame(width: ${round(rect.w)}, height: ${round(rect.h)}).offset(x: ${round(rect.x - originX)}, y: ${round(rect.y - originY)})`,
+          );
+        } else if (node.kind === "text" && node.text) {
+          lines.push(
+            `      Text(${JSON.stringify(node.text.characters)}).offset(x: ${round(rect.x - originX)}, y: ${round(rect.y - originY)})`,
+          );
+        } else {
+          lines.push(
+            `      Rectangle().fill(${fill}).frame(width: ${round(rect.w)}, height: ${round(rect.h)}).offset(x: ${round(rect.x - originX)}, y: ${round(rect.y - originY)})`,
+          );
+        }
+      });
+      lines.push("    }");
+      lines.push(`    .frame(width: ${round(union.w)}, height: ${round(union.h)}, alignment: .topLeading)`);
+      lines.push("  }");
+      lines.push("}");
+    } else {
+      lines.push("// Generated by Icon Crafter Dev Mode (browser harness)");
+      lines.push("import androidx.compose.foundation.background");
+      lines.push("import androidx.compose.foundation.layout.*");
+      lines.push("import androidx.compose.runtime.Composable");
+      lines.push("import androidx.compose.ui.Modifier");
+      lines.push("import androidx.compose.ui.graphics.Color");
+      lines.push("import androidx.compose.ui.unit.dp");
+      lines.push("");
+      lines.push("@Composable");
+      lines.push("fun GeneratedSelection() {");
+      lines.push(`  Box(Modifier.size(${round(union.w)}.dp, ${round(union.h)}.dp)) {`);
+      nodes.forEach((node) => {
+        const rect = this.nodeBounds(node);
+        const solid = DevTransport.nodeSolidColor(node);
+        const background = solid ? `.background(Color(0x${DevTransport.argbHex(solid)}))` : "";
+        lines.push(`    // ${node.name.replace(/\*\//g, "* /")}`);
+        lines.push(
+          `    Box(Modifier.offset(${round(rect.x - originX)}.dp, ${round(rect.y - originY)}.dp).size(${round(rect.w)}.dp, ${round(rect.h)}.dp)${background})`,
+        );
+      });
+      lines.push("  }");
+      lines.push("}");
+    }
+    return Promise.resolve({
+      target: targetKey[target],
+      language: language[targetKey[target]],
+      extension: extension[targetKey[target]],
+      code: lines.join("\n"),
+      warnings,
+      requires_manual_adaptation: true,
+      node_count: nodes.length,
+    });
+  }
+
+  devHandoff(): Promise<Handoff> {
+    this.handoff = { ...this.handoff, revision: this.revision };
+    return Promise.resolve(this.handoff);
+  }
+
+  devAddAnnotation(args: AddAnnotationArgs): Promise<Handoff> {
+    const node = this.node(args.node_id);
+    if (!node) return Promise.reject(new Error(`node not found: ${args.node_id}`));
+    const body = args.body.trim();
+    if (body.length === 0) return Promise.reject(new Error("annotation body is required"));
+    const kind: AnnotationKind = args.kind ?? "note";
+    this.annotationSeq += 1;
+    const annotation: Annotation = {
+      id: `ann_${this.annotationSeq}`,
+      node_id: node.id,
+      node_name: node.name,
+      body,
+      author: args.author.trim() || "You",
+      created_at: args.created_at,
+      kind,
+      link: args.link?.trim() || null,
+      resolved: false,
+    };
+    this.handoff = {
+      ...this.handoff,
+      revision: this.revision,
+      annotations: [...this.handoff.annotations, annotation],
+    };
+    return Promise.resolve(this.handoff);
+  }
+
+  devMarkReady(args: MarkReadyArgs): Promise<Handoff> {
+    this.handoff = {
+      ...this.handoff,
+      revision: this.revision,
+      status: args.status,
+      marked_ready_by: args.by,
+      marked_ready_at: args.at,
+    };
+    return Promise.resolve(this.handoff);
+  }
+
+  devResolveAnnotation(annotationId: string): Promise<Handoff> {
+    const annotation = this.handoff.annotations.find((entry) => entry.id === annotationId);
+    if (!annotation) {
+      return Promise.reject(new Error(`annotation not found: ${annotationId}`));
+    }
+    this.handoff = {
+      ...this.handoff,
+      revision: this.revision,
+      annotations: this.handoff.annotations.map((entry) =>
+        entry.id === annotationId ? { ...entry, resolved: true } : entry,
+      ),
+    };
+    return Promise.resolve(this.handoff);
+  }
+
+  devSnapshot(): Promise<string> {    if (!this.doc) return Promise.reject(new Error("no document is open"));
+    const serialized = this.serialize();
+    return Promise.resolve(
+      JSON.stringify({
+        ...serialized,
+        format: "iconcrafter-dev-document",
+        revision: this.revision,
+      }),
+    );
+  }
+
+  devCompare(documentJson: string): Promise<RevisionDiff> {
+    if (!this.doc) return Promise.reject(new Error("no document is open"));
+    let parsed: { nodes?: DevNode[] } | null = null;
+    try {
+      parsed = JSON.parse(documentJson) as { nodes?: DevNode[] };
+    } catch {
+      return Promise.reject(new Error("the captured revision is not valid JSON"));
+    }
+    if (!parsed || !Array.isArray(parsed.nodes)) {
+      return Promise.reject(new Error("the captured revision is not a document snapshot"));
+    }
+    const current = new Map([...this.doc.nodes.values()].map((node) => [node.id, node]));
+    const captured = new Map(parsed.nodes.map((node) => [node.id, node]));
+    const added: RevisionDiff["added"] = [];
+    const removed: RevisionDiff["removed"] = [];
+    const changed: RevisionDiff["changed"] = [];
+    const comparedFields = [
+      "name",
+      "kind",
+      "visible",
+      "locked",
+      "opacity",
+      "blend",
+      "transform",
+      "fills",
+      "strokes",
+      "effects",
+      "corner_radii",
+      "text",
+      "component",
+    ] as const;
+    for (const [id, node] of captured) {
+      if (!current.has(id)) added.push({ id, name: node.name, kind: node.kind });
+    }
+    for (const [id, node] of current) {
+      if (!captured.has(id)) removed.push({ id, name: node.name, kind: node.kind });
+      else {
+        const other = captured.get(id);
+        if (!other) continue;
+        const fields = comparedFields.filter(
+          (field) => JSON.stringify(node[field] ?? null) !== JSON.stringify(other[field] ?? null),
+        );
+        if (fields.length > 0) changed.push({ id, name: node.name, fields: [...fields] });
+      }
+    }
+    const byId = <T extends { id: string }>(items: T[]): T[] =>
+      items.sort((left, right) => left.id.localeCompare(right.id));
+    byId(added);
+    byId(removed);
+    byId(changed);
+    return Promise.resolve({
+      added,
+      removed,
+      changed,
+      counts: { added: added.length, removed: removed.length, changed: changed.length },
+    });
+  }
+
+  prototypePlay(frameId?: string): Promise<EngineState> {
+    if (!this.doc) return Promise.resolve(this.fail("validation", "No document is open."));
+    const target = frameId ? this.node(frameId) : this.firstFrame();
+    if (!target || target.kind !== "frame") {
+      return Promise.resolve(this.fail("validation", "Select a frame to present."));
+    }
+    if (!this.presentation) this.enterPresentation(target, [], []);
+    return Promise.resolve(this.finish());
+  }
+
+  prototypeStop(): Promise<EngineState> {
+    this.endPresentation();
+    return Promise.resolve(this.finish());
+  }
+
+  prototypeBack(): Promise<EngineState> {
+    if (!this.presentation) return Promise.resolve(this.finish());
+    this.goBackPresentation();
+    return Promise.resolve(this.finish());
+  }
+
   private downloadFile(blob: Blob, filename: string): void {
     if (typeof document === "undefined") return;
     const safeName = filename.replace(/[\\/]/g, "-");
@@ -2771,18 +4175,42 @@ export class DevTransport implements EngineTransport {
 
 function fetchColor(paint: Paint | undefined): string | null {
   if (!paint) return null;
-  if (paint.type === "solid") {
-    const { r, g, b, a } = paint.color;
-    return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
-  }
+  if (paint.type === "solid") return cssColor(paint.color);
   if (paint.type === "linear" || paint.type === "radial" || paint.type === "angular") {
     const stop = paint.stops[0];
-    if (stop) {
-      const { r, g, b, a } = stop.color;
-      return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
-    }
+    if (stop) return cssColor(stop.color);
   }
   return null;
+}
+
+function cssColor(color: Color): string {
+  const { r, g, b, a } = color;
+  return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
+}
+
+const HEX_COLOR_RE = /^#?([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+/** Parses #rgb/#rgba/#rrggbb/#rrggbbaa (with or without `#`). */
+function parseHexColor(value: string): Color | null {
+  const match = HEX_COLOR_RE.exec(value.trim());
+  if (!match) return null;
+  const hex = match[1];
+  if (!hex) return null;
+  const expand = (pair: string): number => parseInt(pair.length === 1 ? pair + pair : pair, 16) / 255;
+  if (hex.length <= 4) {
+    return {
+      r: expand(hex[0] ?? "0"),
+      g: expand(hex[1] ?? "0"),
+      b: expand(hex[2] ?? "0"),
+      a: hex.length === 4 ? expand(hex[3] ?? "f") : 1,
+    };
+  }
+  return {
+    r: expand(hex.slice(0, 2)),
+    g: expand(hex.slice(2, 4)),
+    b: expand(hex.slice(4, 6)),
+    a: hex.length === 8 ? expand(hex.slice(6, 8)) : 1,
+  };
 }
 
 function escapeXml(value: string): string {

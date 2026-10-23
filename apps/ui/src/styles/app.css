@@ -779,8 +779,14 @@ kbd {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1-5);
+  line-height: 1.45;
+}
+
+.panel-footer > * {
+  min-width: 0;
 }
 
 /* --------------------------------------------------------------------------

@@ -67,6 +67,8 @@ export const SHORTCUT_ACTIONS = [
   { id: "file.close", group: "file", defaultBinding: "Mod+W" },
   // App
   { id: "app.commandPalette", group: "app", defaultBinding: "Mod+K" },
+  { id: "app.devMode", group: "app", defaultBinding: "Shift+D" },
+  { id: "app.present", group: "app", defaultBinding: "Mod+Enter" },
 ] as const satisfies readonly ShortcutActionDefinition[];
 
 export type ShortcutActionId = (typeof SHORTCUT_ACTIONS)[number]["id"];

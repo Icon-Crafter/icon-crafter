@@ -1,6 +1,7 @@
 import { useUiStore } from "../engine/uiStore";
 import { useAppStore } from "../engine/store";
 import {
+  detachSelectedInstance,
   openExportDialog,
   requestImportSvg,
   runCommand,
@@ -158,6 +159,12 @@ export function ContextMenus() {
             detail={shortcutHint("edit.createComponent")}
             onSelect={() => void runCommand("create_component")}
           />
+          {node.is_instance && (
+            <MenuItem
+              label={en.context.layer.detachInstance}
+              onSelect={() => void detachSelectedInstance()}
+            />
+          )}
           <MenuSeparator />
           <MenuItem
             label={en.context.layer.bringToFront}

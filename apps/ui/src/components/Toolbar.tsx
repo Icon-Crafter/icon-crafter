@@ -8,6 +8,7 @@ import {
   Circle,
   ConnectorGlyph,
   Download,
+  FileCode2,
   FrameGlyph,
   Hand,
   ImageIcon,
@@ -32,6 +33,7 @@ import {
 } from "../icons";
 import {
   openExportDialog,
+  presentPrototype,
   requestCloseDocument,
   requestImportSvg,
   requestNewDocument,
@@ -41,8 +43,10 @@ import {
   runCommand,
   runTool,
   shortcutHint,
+  toggleDevMode,
   toolShortcutHint,
 } from "../engine/commands";
+import { useDevModeStore } from "../engine/devModeStore";
 import { MenuItem, MenuLabel, MenuSeparator, MenuSurface } from "./primitives/IconButton";
 import { IconButton } from "./primitives/IconButton";
 
@@ -91,6 +95,7 @@ export function Toolbar() {
   const transportKind = useAppStore((state) => state.transportKind);
   const pushToast = useAppStore((state) => state.pushToast);
   const capabilities = useCapabilities();
+  const devModeActive = useDevModeStore((state) => state.active);
 
   const [fileMenu, setFileMenu] = useState<{ x: number; y: number } | null>(null);
   const [zoomMenu, setZoomMenu] = useState<{ x: number; y: number } | null>(null);
@@ -258,6 +263,19 @@ export function Toolbar() {
         <span className="toolbar-sep" aria-hidden="true" />
 
         <div className="toolbar-group">
+          <IconButton
+            label={en.dev.label}
+            title={`${en.dev.tooltip} (${shortcutHint("app.devMode")})`}
+            shortcut={shortcutHint("app.devMode")}
+            active={devModeActive}
+            disabled={!ready}
+            onClick={() => toggleDevMode()}
+          >
+            <FileCode2 size={15} />
+          </IconButton>
+        </div>
+
+        <div className="toolbar-group">
           <button
             ref={exportRef}
             type="button"
@@ -285,9 +303,10 @@ export function Toolbar() {
 
         <div className="toolbar-group">
           <IconButton
-            label={en.chrome.present}
-            title={en.chrome.presentHint}
-            onClick={() => unavailable(en.chrome.present)}
+            label={en.prototype.present}
+            title={capabilities.prototype === true ? en.prototype.presentHint : en.toasts.capabilityUnavailable}
+            disabled={!ready || capabilities.prototype !== true}
+            onClick={() => void presentPrototype()}
           >
             <Play size={14} />
           </IconButton>

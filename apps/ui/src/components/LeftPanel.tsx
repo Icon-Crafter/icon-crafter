@@ -2,16 +2,18 @@ import { useAppStore } from "../engine/store";
 import type { LeftTab } from "../engine/store";
 import { en } from "../i18n/en";
 import { format } from "../i18n/en";
-import { Component, FileText, Layers, Palette, PanelLeftClose, PanelLeftOpen } from "../icons";
+import { Component, FileText, Layers, Palette, PanelLeftClose, PanelLeftOpen, Variable } from "../icons";
 import { LayersPanel } from "./panels/LayersPanel";
 import { AssetsPanel } from "./panels/AssetsPanel";
 import { ComponentsPanel } from "./panels/ComponentsPanel";
+import { VariablesPanel } from "./panels/VariablesPanel";
 import { PagesPanel } from "./panels/PagesPanel";
 
 const TABS: { id: LeftTab; label: string; icon: React.ReactNode }[] = [
   { id: "layers", label: en.panels.layers, icon: <Layers size={14} /> },
   { id: "assets", label: en.panels.assets, icon: <Palette size={14} /> },
   { id: "components", label: en.panels.components, icon: <Component size={14} /> },
+  { id: "variables", label: en.panels.variables, icon: <Variable size={14} /> },
   { id: "pages", label: en.panels.pages, icon: <FileText size={14} /> },
 ];
 
@@ -32,6 +34,8 @@ export function LeftPanel() {
       (summary?.styles.texts.length ?? 0) +
       (summary?.styles.effects.length ?? 0),
     components: summary?.components.length ?? 0,
+    variables:
+      summary?.variables?.reduce((total, collection) => total + (collection.variables?.length ?? 0), 0) ?? 0,
     pages: summary?.pages.length ?? 0,
   };
 
@@ -102,6 +106,7 @@ export function LeftPanel() {
         {leftTab === "layers" && <LayersPanel />}
         {leftTab === "assets" && <AssetsPanel />}
         {leftTab === "components" && <ComponentsPanel />}
+        {leftTab === "variables" && <VariablesPanel />}
         {leftTab === "pages" && <PagesPanel />}
       </div>
 

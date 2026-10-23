@@ -335,14 +335,42 @@ export interface StyleEntry {
 
 export interface ComponentEntry {
   node_id: string;
+  /** Registry id used by `place_instance`; absent/null for component sets. */
+  component_id?: string | null;
   name: string;
   kind: "component" | "component_set";
+}
+
+export type VariableTypeName = "color" | "float" | "string" | "boolean";
+
+/**
+ * Tagged union matching `dp_model::VariableValue` serde output.
+ * `alias` references another variable; the engine resolves it, the UI only
+ * shows the reference.
+ */
+export type VariableValueJson =
+  | { type: "color"; color: Color }
+  | { type: "float"; value: number }
+  | { type: "string"; value: string }
+  | { type: "boolean"; value: boolean }
+  | { type: "alias"; variable_id: string };
+
+export interface VariableEntry {
+  id: string;
+  name: string;
+  resolved_type: VariableTypeName;
+  /** Values per mode id; missing modes fall back to the collection default. */
+  values: Record<string, VariableValueJson>;
 }
 
 export interface VariableCollectionEntry {
   id: string;
   name: string;
   modes: { id: string; name: string }[];
+  /** Active mode from document settings; absent means "collection default". */
+  active_mode_id?: string | null;
+  /** Full variable list (newer engine snapshots). Older engines omit it. */
+  variables?: VariableEntry[];
 }
 
 export interface DocSummary {
@@ -374,6 +402,8 @@ export interface NodeDetail {
   layout: AutoLayout | null;
   constraints: Constraints | null;
   component: ComponentRole | null;
+  /** Prototype interactions attached to this node (newer engine snapshots). */
+  prototype: PrototypeNodeJson | null;
   is_inside_instance: boolean;
   /** World-space AABB. */
   absolute_bounds: Rect;
@@ -470,6 +500,58 @@ export interface TextEditState {
   color: Color;
 }
 
+// ---------------------------------------------------------------------------
+// Prototype model (mirrors crates/dp-model prototype serde JSON)
+// ---------------------------------------------------------------------------
+
+/** Trigger JSON exactly as `dp_model::prototype::Trigger` serializes. */
+export type TriggerJson =
+  | { type: "click"; delay_ms?: number }
+  | { type: "hover" }
+  | { type: "press" }
+  | { type: "key"; key: string }
+  | { type: "after_delay"; delay_ms: number };
+
+/** Action JSON accepted by the engine's `add_interaction` command. */
+export type ActionJson =
+  | { type: "navigate_to"; frame_id: string }
+  | { type: "open_overlay"; frame_id: string }
+  | { type: "close_overlay" }
+  | { type: "scroll_to"; target: string }
+  | { type: "back" }
+  | { type: "set_variable"; variable_id: string; value: VariableValueJson };
+
+export interface InteractionJson {
+  id: string;
+  trigger: TriggerJson;
+  actions: ActionJson[];
+}
+
+/** `NodeDetail.prototype` / engine `PrototypeNode`. */
+export interface PrototypeNodeJson {
+  interactions: InteractionJson[];
+}
+
+/** Interactive node on the currently presented frame or one of its overlays. */
+export interface PrototypeHotspot {
+  node_id: string;
+  /** World-space AABB. */
+  rect: Rect;
+  /** Layer name (engine currently supplies the node name). */
+  label: string;
+}
+
+/** Additive snapshot field present while `prototype_play` is active. */
+export interface PrototypeState {
+  active: boolean;
+  frame_id: string;
+  frame_name: string;
+  can_back: boolean;
+  overlay_count: number;
+  /** Empty when not presenting or when the engine build predates hotspots. */
+  hotspots?: PrototypeHotspot[];
+}
+
 export interface EngineState {
   doc: DocMeta | null;
   /** Bumps on any document mutation (undo included). */
@@ -487,6 +569,8 @@ export interface EngineState {
   summary: DocSummary | null;
   selection_details: NodeDetail[];
   text_edit: TextEditState | null;
+  /** Prototype presentation session, null when not presenting. */
+  prototype: PrototypeState | null;
   errors: EngineError[];
   status: string | null;
 }
@@ -581,7 +665,6 @@ export interface CommandArgs {
   group: undefined;
   ungroup: undefined;
   mask_with_selection: undefined;
-  create_component: undefined;
   create_component_set: undefined;
   detach_instance: undefined;
   swap_instance: { component_id: string };
@@ -634,16 +717,41 @@ export interface CommandArgs {
   /** Returns a validation error when the last remaining page is deleted. */
   delete_page: { page_id: string };
 
-  // Prototype / Dev Mode — accepted but may return `unsupported` in this phase.
-  set_interaction: Record<string, unknown>;
-  remove_interaction: Record<string, unknown>;
-  prototype_play: Record<string, unknown> | undefined;
-  prototype_stop: Record<string, unknown> | undefined;
-  dev_mode_toggle: Record<string, unknown> | undefined;
-  dev_mode_mark_ready: Record<string, unknown> | undefined;
-  dev_mode_export_asset: Record<string, unknown>;
-  dev_mode_generate_code: { language: string };
-  dev_mode_add_annotation: Record<string, unknown>;
+  // Prototype authoring / presentation (v1.5 contract addendum)
+  add_interaction: {
+    /** Defaults to the first selected node. */
+    node_id?: string;
+    trigger: TriggerJson;
+    actions: ActionJson[] | ActionJson;
+  };
+  remove_interaction: { node_id?: string; interaction_id: string };
+  prototype_play: { frame_id?: string } | undefined;
+  prototype_stop: undefined;
+  prototype_back: undefined;
+
+  // Design system — sizes / styles / variables
+  create_component: { name?: string } | undefined;
+  place_instance: {
+    component_id: string;
+    x: number;
+    y: number;
+    parent_id?: string | null;
+  };
+  create_style_from_node: { node_id?: string; name?: string } | undefined;
+  apply_style: { style_id: string; ids?: string[] };
+  rename_style: { style_id: string; name: string };
+  delete_style: { style_id: string };
+  create_variable_collection: { name: string };
+  create_color_variable: { collection?: string; name: string; color: string };
+  create_float_variable: { collection?: string; name: string; value: number };
+  set_variable_value: {
+    variable_id: string;
+    /** Plain number/string or the tagged `VariableValue` JSON. */
+    value: number | string | VariableValueJson;
+    /** Defaults to the collection's active mode. */
+    mode_id?: string;
+  };
+  set_active_mode: { collection_id: string; mode_id: string };
 }
 
 export type CommandName = keyof CommandArgs;
@@ -734,6 +842,201 @@ export const DEFAULT_CAPABILITIES: Capabilities = {
 };
 
 // ---------------------------------------------------------------------------
+// Dev Mode (inspection, code generation, handoff, revision compare)
+// Mirrors crates/dp-devmode serde output exactly (snake_case).
+// ---------------------------------------------------------------------------
+
+/** Code generator target requested by the UI (Rust parses these aliases). */
+export type CodegenTarget = "css" | "react" | "swiftui" | "compose";
+
+/** Code target value echoed back by the engine (`serde(rename_all = "snake_case")`). */
+export type GeneratedCodeTarget = "css" | "react_type_script" | "swift_ui" | "compose";
+
+export interface GradientStopInfo {
+  /** Normalised position 0..=1. */
+  position: number;
+  color: Color;
+  hex: string;
+}
+
+export interface PaintInfo {
+  /** Paint kind: solid, linear, radial, angular, image. */
+  kind: string;
+  color: Color | null;
+  hex: string | null;
+  stops: GradientStopInfo[];
+  opacity: number;
+  blend: string;
+  style_id: string | null;
+  variable_id: string | null;
+  variable_name: string | null;
+}
+
+export interface DevStrokeInfo {
+  paint: PaintInfo;
+  weight: number;
+  align: string;
+  cap: string;
+  join: string;
+  miter_limit: number;
+  dash: number[] | null;
+}
+
+export interface DevEffectInfo {
+  /** Effect kind: drop_shadow, inner_shadow, layer_blur, background_blur. */
+  kind: string;
+  color: Color | null;
+  offset: [number, number] | null;
+  blur: number;
+  spread: number;
+  blend: string | null;
+}
+
+export interface DevTextInfo {
+  characters: string;
+  font_family: string;
+  font_size: number;
+  font_weight: number;
+  italic: boolean;
+  line_height: number;
+  letter_spacing: number;
+  align: string;
+  vertical_align: string;
+  color: Color | null;
+  overflow: boolean;
+}
+
+export interface DevComponentInfo {
+  /** Role: component, component_set, instance. */
+  role: string;
+  component_id: string | null;
+  component_name: string | null;
+  override_count: number;
+  inside_instance: boolean;
+}
+
+export interface NodeInspect {
+  id: string;
+  name: string;
+  kind: string;
+  page: string;
+  parent: string | null;
+  children: string[];
+  /** Page-space axis-aligned bounds. */
+  bounds: [number, number, number, number];
+  size: [number, number];
+  local_position: [number, number];
+  rotation: number;
+  flip: [boolean, boolean];
+  opacity: number;
+  blend: string;
+  visible: boolean;
+  locked: boolean;
+  /** Absolute matrix `[m11, m12, m21, m22, tx, ty]`. */
+  matrix: [number, number, number, number, number, number];
+  fills: PaintInfo[];
+  strokes: DevStrokeInfo[];
+  effects: DevEffectInfo[];
+  /** Corner radii `[tl, tr, br, bl]`. */
+  corner_radii: [number, number, number, number];
+  layout_direction: string | null;
+  layout_gap: number | null;
+  layout_padding: [number, number, number, number] | null;
+  layout_sizing: [string, string] | null;
+  constraints: [string, string] | null;
+  text: DevTextInfo | null;
+  component: DevComponentInfo | null;
+  variable_refs: string[];
+  style_refs: string[];
+}
+
+export interface InspectSnapshot {
+  nodes: NodeInspect[];
+  bounds: [number, number, number, number] | null;
+  total_size: [number, number];
+  warnings: string[];
+}
+
+export interface GeneratedCode {
+  target: GeneratedCodeTarget;
+  /** Language label: css, typescript, swift, kotlin. */
+  language: string;
+  extension: string;
+  code: string;
+  warnings: string[];
+  requires_manual_adaptation: boolean;
+  node_count: number;
+}
+
+export type AnnotationKind = "note" | "implementation" | "measurement";
+
+export interface Annotation {
+  id: string;
+  node_id: string;
+  node_name: string;
+  body: string;
+  author: string;
+  created_at: string;
+  kind: AnnotationKind;
+  link: string | null;
+  resolved: boolean;
+}
+
+export type HandoffStatus =
+  | "draft"
+  | "ready_for_review"
+  | "ready_for_development"
+  | "implemented";
+
+export interface Handoff {
+  revision: number;
+  status: HandoffStatus;
+  annotations: Annotation[];
+  marked_ready_by: string | null;
+  marked_ready_at: string | null;
+}
+
+export interface AddAnnotationArgs {
+  node_id: string;
+  body: string;
+  author: string;
+  created_at: string;
+  kind?: AnnotationKind;
+  link?: string;
+}
+
+export interface MarkReadyArgs {
+  status: HandoffStatus;
+  by: string;
+  at: string;
+}
+
+export interface NodeDiff {
+  id: string;
+  name: string;
+  kind: string;
+}
+
+export interface NodeChange {
+  id: string;
+  name: string;
+  fields: string[];
+}
+
+export interface DiffCounts {
+  added: number;
+  removed: number;
+  changed: number;
+}
+
+export interface RevisionDiff {
+  added: NodeDiff[];
+  removed: NodeDiff[];
+  changed: NodeChange[];
+  counts: DiffCounts;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -777,6 +1080,7 @@ export function initialEngineState(viewport: Viewport = DEFAULT_VIEWPORT): Engin
     summary: null,
     selection_details: [],
     text_edit: null,
+    prototype: null,
     errors: [],
     status: null,
   };

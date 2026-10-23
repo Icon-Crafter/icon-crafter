@@ -15,6 +15,8 @@ import {
 } from "../icons";
 import { EmptyState } from "./primitives/Layout";
 import { TransformSection } from "./inspector/TransformSection";
+import { StylesSection } from "./inspector/StylesSection";
+import { PrototypeSection } from "./inspector/PrototypeSection";
 import {
   ComponentSection,
   EffectsSection,
@@ -144,6 +146,8 @@ export function Inspector() {
           <EffectsSection node={single} />
           <TypographySection node={single} />
           <ComponentSection node={single} />
+          <StylesSection node={single} />
+          <PrototypeSection node={single} />
           <ExportSection />
         </div>
       ) : selection.length > 1 ? (

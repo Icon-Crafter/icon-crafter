@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useAppStore } from "./engine/store";
-import { handleShortcut } from "./engine/commands";
+import { handleShortcut, stopPresentation } from "./engine/commands";
 import {
   isEditableTarget,
   isMacPlatform,
@@ -11,12 +11,14 @@ import { en } from "./i18n/en";
 import { CommandPalette } from "./components/CommandPalette";
 import { ContextMenus } from "./components/ContextMenus";
 import { DialogHost } from "./components/Dialogs";
-import { Inspector } from "./components/Inspector";
+import { RightSidebar } from "./components/RightSidebar";
 import { LeftPanel } from "./components/LeftPanel";
 import { CanvasStage } from "./components/CanvasStage";
 import { StatusBar } from "./components/StatusBar";
 import { Toasts } from "./components/Toasts";
 import { Toolbar } from "./components/Toolbar";
+import { Presentation } from "./components/Presentation";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 
 /**
  * Application shell. Mounts the engine connection and maps the window-level
@@ -41,6 +43,14 @@ export function App() {
     const isMac = isMacPlatform();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
+      // In presentation the engine owns navigation; only Escape is handled here.
+      if (useAppStore.getState().engine.prototype?.active) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          void stopPresentation();
+        }
+        return;
+      }
       const action = resolveShortcut(event, useAppStore.getState().shortcuts, isMac);
       if (!action) return;
       if (action === "app.commandPalette") {
@@ -75,6 +85,16 @@ export function App() {
     document.documentElement.dataset.platform = isMacPlatform() ? "mac" : "win";
   }, []);
 
+  // Presentation replaces the editor chrome: the engine owns navigation there.
+  if (engine.prototype?.active) {
+    return (
+      <div className="app-shell app-shell--presenting">
+        <Presentation />
+        <Toasts />
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <Toolbar />
@@ -83,12 +103,13 @@ export function App() {
         <main className="canvas-area" aria-label={en.canvas.workspaceLabel}>
           <CanvasStage />
         </main>
-        <Inspector />
+        <RightSidebar />
       </div>
       <StatusBar />
       <CommandPalette />
       <ContextMenus />
       <DialogHost />
+      <ConfirmDialog />
       <Toasts />
     </div>
   );

@@ -66,6 +66,7 @@ function detail(id: string, bounds: Rect): NodeDetail {
     is_inside_instance: false,
     absolute_bounds: bounds,
     resolved: null,
+    prototype: null,
   };
 }
 

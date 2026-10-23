@@ -10,9 +10,11 @@
  * directly, so behaviour stays consistent across toolbar, palette and menus.
  */
 import type {
+  ActionJson,
   Capabilities,
   CommandArgs,
   CommandName,
+  ComponentEntry,
   DocKind,
   EngineState,
   ExportPdf,
@@ -21,9 +23,15 @@ import type {
   ExportVector,
   NodePatch,
   ToolId,
+  TriggerJson,
+  VariableValueJson,
 } from "./contract";
 import { DEFAULT_CAPABILITIES } from "./contract";
 import { getActivePump, useAppStore, type UnsavedIntent } from "./store";
+import { useDevModeStore } from "./devModeStore";
+import { useUiStore } from "./uiStore";
+import { detectStyleKind, styleNameFor } from "./designSystem";
+import { presentTargetId } from "./prototype";
 import { isTauriRuntime, normalizeEngineError } from "./transport";
 import type { ShortcutActionId } from "./shortcuts";
 import { en, format } from "../i18n/en";
@@ -564,9 +572,288 @@ export function handleShortcut(id: ShortcutActionId): void {
       useAppStore.getState().setPaletteOpen(!open);
       return;
     }
+    case "app.devMode":
+      toggleDevMode();
+      return;
+    case "app.present":
+      presentPrototype();
+      return;
     default:
       return;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Prototype authoring + presentation
+// ---------------------------------------------------------------------------
+
+function toastWarning(title: string, message?: string): void {
+  useAppStore.getState().pushToast({ kind: "warning", title, message });
+}
+
+function toastInfo(title: string, message?: string): void {
+  useAppStore.getState().pushToast({ kind: "info", title, message });
+}
+
+/** Adds an interaction to a node (defaults to the current selection). */
+export async function addInteraction(
+  nodeId: string | undefined,
+  trigger: TriggerJson,
+  actions: ActionJson[],
+): Promise<void> {
+  if (actions.length === 0) {
+    toastWarning(en.prototype.action, en.prototype.frameRequired);
+    return;
+  }
+  const state = await runCommand("add_interaction", {
+    node_id: nodeId,
+    trigger,
+    actions,
+  });
+  if (state) toastInfo(en.toasts.interactionAdded);
+}
+
+export async function removeInteraction(
+  nodeId: string | undefined,
+  interactionId: string,
+): Promise<void> {
+  const state = await runCommand("remove_interaction", {
+    node_id: nodeId,
+    interaction_id: interactionId,
+  });
+  if (state) toastInfo(en.toasts.interactionRemoved);
+}
+
+/**
+ * Starts presentation for the selected frame, or the first frame on the page.
+ * The engine owns navigation and click hit-testing; the presentation layer
+ * only renders the returned frame and forwards pointer input.
+ */
+export async function presentPrototype(): Promise<void> {
+  const pump = getActivePump();
+  if (!pump) return;
+  const state = useAppStore.getState();
+  if (state.status !== "ready") {
+    toastInfo(en.presentation.errorTitle, en.presentation.errorBody);
+    return;
+  }
+  if (!engineCapabilities().prototype) {
+    toastWarning(
+      format(en.toasts.unsupported, { command: en.prototype.present }),
+      en.toasts.capabilityUnavailable,
+    );
+    return;
+  }
+  if (state.engine.prototype?.active) return;
+  const target = presentTargetId(state.engine);
+  if (!target.ok) {
+    toastWarning(en.prototype.present, en.prototype.noFrames);
+    return;
+  }
+  try {
+    await pump.prototypePlay(target.frameId);
+    const active = useAppStore.getState().engine.prototype;
+    if (!active?.active) {
+      toastWarning(en.presentation.errorTitle, en.presentation.errorBody);
+    }
+  } catch (error) {
+    useAppStore.getState().reportEngineError(normalizeEngineError(error));
+  }
+}
+
+export async function stopPresentation(): Promise<void> {
+  const pump = getActivePump();
+  if (!pump) return;
+  try {
+    await pump.prototypeStop();
+  } catch (error) {
+    useAppStore.getState().reportEngineError(normalizeEngineError(error));
+  }
+}
+
+export async function prototypeBack(): Promise<void> {
+  const pump = getActivePump();
+  if (!pump) return;
+  try {
+    await pump.prototypeBack();
+  } catch (error) {
+    useAppStore.getState().reportEngineError(normalizeEngineError(error));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Design system: components, styles, variables
+// ---------------------------------------------------------------------------
+
+export async function createComponentFromSelection(name?: string): Promise<void> {
+  const details = useAppStore.getState().engine.selection_details;
+  if (details.length === 0) {
+    toastWarning(en.components.createFromSelection, en.components.emptySelection);
+    return;
+  }
+  const parents = new Set(details.map((node) => node.parent ?? "root"));
+  if (parents.size > 1) {
+    toastWarning(en.components.createFromSelection, en.components.sameParentError);
+    return;
+  }
+  const state = await runCommand("create_component", name ? { name } : undefined);
+  if (state) toastInfo(en.toasts.componentCreated);
+}
+
+export async function detachSelectedInstance(): Promise<void> {
+  const state = await runCommand("detach_instance");
+  if (state) toastInfo(en.toasts.instanceDetached);
+}
+
+/** Inserts an instance of a component at the centre of the current viewport. */
+export async function insertComponent(component: ComponentEntry): Promise<void> {
+  const { engine } = useAppStore.getState();
+  const centerX = engine.viewport.x + engine.viewport.width / 2 / Math.max(engine.viewport.zoom, 0.01);
+  const centerY = engine.viewport.y + engine.viewport.height / 2 / Math.max(engine.viewport.zoom, 0.01);
+  const state = await runCommand("place_instance", {
+    component_id: component.component_id ?? component.node_id,
+    x: centerX,
+    y: centerY,
+  });
+  if (state) toastInfo(en.toasts.instanceInserted, en.components.insertedAtCenter);
+}
+
+/** Creates a style from the first selected node, mirroring the engine's kind detection. */
+export async function createStyleFromSelection(): Promise<void> {
+  const details = useAppStore.getState().engine.selection_details;
+  const node = details[0];
+  if (!node) {
+    toastWarning(en.styles.createFromSelection, en.styles.fromSelectionUnavailable);
+    return;
+  }
+  const kind = detectStyleKind(node);
+  if (!kind) {
+    toastWarning(en.styles.createFromSelection, en.styles.fromSelectionUnavailable);
+    return;
+  }
+  const state = await runCommand("create_style_from_node", {
+    node_id: node.id,
+    name: styleNameFor(kind, node),
+  });
+  if (state) toastInfo(en.toasts.styleCreated);
+}
+
+export async function applyStyle(styleId: string, ids?: string[]): Promise<void> {
+  const state = await runCommand("apply_style", { style_id: styleId, ids });
+  if (state) toastInfo(en.toasts.styleApplied);
+}
+
+export async function renameStyle(styleId: string, name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  const state = await runCommand("rename_style", { style_id: styleId, name: trimmed });
+  if (state) toastInfo(en.toasts.styleRenamed);
+}
+
+export async function deleteStyle(styleId: string, name: string): Promise<void> {
+  useUiStore.getState().openConfirm({
+    title: en.styles.deleteTitle,
+    body: format(en.styles.deleteBody, { name }),
+    confirmLabel: en.styles.delete,
+    danger: true,
+    onConfirm: async () => {
+      const state = await runCommand("delete_style", { style_id: styleId });
+      if (state) toastInfo(en.toasts.styleDeleted);
+    },
+  });
+}
+
+export async function createVariableCollection(name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  const state = await runCommand("create_variable_collection", { name: trimmed });
+  if (state) toastInfo(en.toasts.variableCreated);
+}
+
+export async function createColorVariable(
+  collection: string | undefined,
+  name: string,
+  color: string,
+): Promise<void> {
+  const trimmedName = name.trim();
+  if (!trimmedName || !collection) return;
+  const state = await runCommand("create_color_variable", {
+    collection,
+    name: trimmedName,
+    color,
+  });
+  if (state) toastInfo(en.toasts.variableCreated);
+}
+
+export async function createFloatVariable(
+  collection: string | undefined,
+  name: string,
+  value: number,
+): Promise<void> {
+  const trimmedName = name.trim();
+  if (!trimmedName || !collection || !Number.isFinite(value)) return;
+  const state = await runCommand("create_float_variable", {
+    collection,
+    name: trimmedName,
+    value,
+  });
+  if (state) toastInfo(en.toasts.variableCreated);
+}
+
+export async function setVariableValue(
+  variableId: string,
+  value: VariableValueJson,
+  modeId?: string,
+): Promise<void> {
+  const state = await runCommand("set_variable_value", {
+    variable_id: variableId,
+    value,
+    mode_id: modeId,
+  });
+  if (state) toastInfo(en.toasts.variableValueUpdated);
+}
+
+export async function setActiveVariableMode(collectionId: string, modeId: string): Promise<void> {
+  const state = await runCommand("set_active_mode", {
+    collection_id: collectionId,
+    mode_id: modeId,
+  });
+  if (state) toastInfo(en.toasts.modeChanged);
+}
+
+/**
+ * Toggles the Dev Mode right sidebar. The engine flag is set through
+ * `set_dev_mode`; the panel itself only reads data (inspect/codegen/handoff/
+ * compare) and never mutates the design.
+ */
+export function toggleDevMode(): void {
+  if (!engineCapabilities().dev_mode) {
+    useAppStore.getState().pushToast({
+      kind: "warning",
+      title: format(en.toasts.unsupported, { command: en.dev.label }),
+      message: en.toasts.capabilityUnavailable,
+    });
+    return;
+  }
+  if (useAppStore.getState().status !== "ready") {
+    useAppStore.getState().pushToast({
+      kind: "info",
+      title: en.dev.label,
+      message: en.dev.notConnected,
+    });
+    return;
+  }
+  const dev = useDevModeStore.getState();
+  const next = !dev.active;
+  void dev.setActive(next).then(() => {
+    const state = useDevModeStore.getState();
+    if (!state.active) return;
+    const engine = useAppStore.getState().engine;
+    if (engine.doc) {
+      void state.refreshInspect();
+      void state.reloadHandoff();
+    }
+  });
 }
 
 /** Tool availability note shown in the status bar / tooltip. */

@@ -15,7 +15,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import type {
+  AddAnnotationArgs,
   Bootstrap,
+  CodegenTarget,
   CommandArgs,
   CommandName,
   DocKind,
@@ -25,9 +27,14 @@ import type {
   ExportRaster,
   ExportResult,
   ExportVector,
+  GeneratedCode,
+  Handoff,
+  InspectSnapshot,
   KeyInput,
+  MarkReadyArgs,
   NodeDetail,
   PointerInput,
+  RevisionDiff,
   SaveResult,
   ToolId,
   WheelInput,
@@ -75,6 +82,26 @@ export interface EngineTransport {
   importImage(args: { path: string }): Promise<EngineState>;
   /** Applies a preference and returns the updated preference map. */
   setPreference(key: string, value: unknown): Promise<Record<string, unknown>>;
+  /** Dev Mode: toggles the engine-side dev flag and returns the snapshot. */
+  setDevMode(enabled: boolean): Promise<EngineState>;
+  /** Dev Mode: resolved inspection data for the current selection. */
+  devInspect(): Promise<InspectSnapshot>;
+  /** Dev Mode: deterministic code for the current selection. */
+  devCodegen(target: CodegenTarget, precision?: number): Promise<GeneratedCode>;
+  /** Dev Mode: current handoff state (annotations + readiness). */
+  devHandoff(): Promise<Handoff>;
+  devAddAnnotation(args: AddAnnotationArgs): Promise<Handoff>;
+  devMarkReady(args: MarkReadyArgs): Promise<Handoff>;
+  /** Dev Mode: canonical document JSON for revision capture. */
+  devSnapshot(): Promise<string>;
+  /** Dev Mode: structural diff; `document_json` is a previously captured revision. */
+  devCompare(documentJson: string): Promise<RevisionDiff>;
+  /** Marks one annotation resolved; returns the updated handoff. */
+  devResolveAnnotation(annotationId: string): Promise<Handoff>;
+  /** Prototype presentation: starts at a frame (or the document start frame). */
+  prototypePlay(frameId?: string): Promise<EngineState>;
+  prototypeStop(): Promise<EngineState>;
+  prototypeBack(): Promise<EngineState>;
   pickSavePath(options: PickSaveOptions): Promise<string | null>;
   pickOpenPath(options?: PickOpenOptions): Promise<string | null>;
 }
@@ -226,6 +253,68 @@ export class TauriTransport implements EngineTransport {
 
   setPreference(key: string, value: unknown): Promise<Record<string, unknown>> {
     return invoke<Record<string, unknown>>("set_preference", { key, value });
+  }
+
+  setDevMode(enabled: boolean): Promise<EngineState> {
+    return invoke<EngineState>("set_dev_mode", { enabled });
+  }
+
+  devInspect(): Promise<InspectSnapshot> {
+    return invoke<InspectSnapshot>("dev_inspect", {});
+  }
+
+  devCodegen(target: CodegenTarget, precision?: number): Promise<GeneratedCode> {
+    return invoke<GeneratedCode>("dev_codegen", {
+      target,
+      precision: precision ?? null,
+    });
+  }
+
+  devHandoff(): Promise<Handoff> {
+    return invoke<Handoff>("dev_handoff", {});
+  }
+
+  devAddAnnotation(args: AddAnnotationArgs): Promise<Handoff> {
+    return invoke<Handoff>("dev_add_annotation", {
+      node_id: args.node_id,
+      body: args.body,
+      author: args.author,
+      created_at: args.created_at,
+      kind: args.kind ?? null,
+      link: args.link ?? null,
+    });
+  }
+
+  devMarkReady(args: MarkReadyArgs): Promise<Handoff> {
+    return invoke<Handoff>("dev_mark_ready", {
+      status: args.status,
+      by: args.by,
+      at: args.at,
+    });
+  }
+
+  devSnapshot(): Promise<string> {
+    return invoke<string>("dev_snapshot", {});
+  }
+
+  devCompare(documentJson: string): Promise<RevisionDiff> {
+    return invoke<RevisionDiff>("dev_compare", { document_json: documentJson });
+  }
+
+  devResolveAnnotation(annotationId: string): Promise<Handoff> {
+    return invoke<Handoff>("dev_resolve_annotation", { annotation_id: annotationId });
+  }
+
+  prototypePlay(frameId?: string): Promise<EngineState> {
+    return invoke<EngineState>("prototype_play", { frame_id: frameId ?? null });
+  }
+
+  prototypeStop(): Promise<EngineState> {
+    return invoke<EngineState>("prototype_stop", {});
+  }
+
+  prototypeBack(): Promise<EngineState> {
+    return invoke<EngineState>("prototype_back", {});
   }
 
   async pickSavePath(options: PickSaveOptions): Promise<string | null> {

@@ -7,14 +7,21 @@
  * resulting snapshot is applied exactly in order.
  */
 import type {
+  AddAnnotationArgs,
+  CodegenTarget,
   CommandArgs,
   CommandName,
   DocKind,
   EngineError,
   EngineState,
+  GeneratedCode,
+  Handoff,
+  InspectSnapshot,
   KeyInput,
+  MarkReadyArgs,
   NodeDetail,
   PointerInput,
+  RevisionDiff,
   SaveResult,
   ToolId,
   WheelInput,
@@ -162,5 +169,65 @@ export class EnginePump {
   saveDocument(path?: string): Promise<SaveResult> {
     this.flushPending();
     return this.enqueue(() => this.transport.saveDocument(path));
+  }
+
+  setDevMode(enabled: boolean): Promise<EngineState> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.setDevMode(enabled)).then(this.apply).catch(this.fail("set_dev_mode"));
+  }
+
+  devInspect(): Promise<InspectSnapshot> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.devInspect());
+  }
+
+  devCodegen(target: CodegenTarget, precision?: number): Promise<GeneratedCode> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.devCodegen(target, precision));
+  }
+
+  devHandoff(): Promise<Handoff> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.devHandoff());
+  }
+
+  devAddAnnotation(args: AddAnnotationArgs): Promise<Handoff> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.devAddAnnotation(args));
+  }
+
+  devMarkReady(args: MarkReadyArgs): Promise<Handoff> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.devMarkReady(args));
+  }
+
+  devSnapshot(): Promise<string> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.devSnapshot());
+  }
+
+  devCompare(documentJson: string): Promise<RevisionDiff> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.devCompare(documentJson));
+  }
+
+  devResolveAnnotation(annotationId: string): Promise<Handoff> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.devResolveAnnotation(annotationId));
+  }
+
+  prototypePlay(frameId?: string): Promise<EngineState> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.prototypePlay(frameId)).then(this.apply);
+  }
+
+  prototypeStop(): Promise<EngineState> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.prototypeStop()).then(this.apply);
+  }
+
+  prototypeBack(): Promise<EngineState> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.prototypeBack()).then(this.apply);
   }
 }

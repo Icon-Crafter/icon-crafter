@@ -22,7 +22,7 @@ import {
 import { loadBindings, saveBindings, type BindingMap } from "./shortcuts";
 
 export type ConnectionStatus = "connecting" | "ready" | "unavailable";
-export type LeftTab = "layers" | "assets" | "components" | "pages";
+export type LeftTab = "layers" | "assets" | "components" | "variables" | "pages";
 export type DialogKind = "export" | "saveAs" | "unsaved";
 export type UnsavedIntent = "new" | "open" | "close";
 export type ToastKind = "info" | "success" | "warning" | "error";
