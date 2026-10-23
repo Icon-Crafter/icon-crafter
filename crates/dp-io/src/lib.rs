@@ -12,6 +12,7 @@ pub mod import;
 pub mod pdf;
 pub mod raster;
 pub mod svg;
+pub mod website;
 
 use dp_geom::Rect;
 use dp_model::{Color, Document, PageId};

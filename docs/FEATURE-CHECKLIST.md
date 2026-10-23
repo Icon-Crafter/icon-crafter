@@ -147,8 +147,8 @@ Last updated: session 15 (plugins + AI subsystems implemented with op-scoped san
 | W1 | Whiteboard: sticky notes, shapes, connectors, freehand, tables, mind maps, voting, timer, templates, reactions | planned | |
 | W2 | Slides: creation/reorder, templates/themes, notes, transitions, present, PDF export | planned | |
 | W3 | Drawing/illustration: vector brushes, pressure, layers, texture/pattern fills, SVG/PNG/PDF export | planned | |
-| W4 | Website design: breakpoints, sections, content collections, responsive preview, HTML/CSS export | planned | |
-| W5 | Website publishing backend: actual deploy workflow, custom-domain config | planned | |
+| W4 | Website design: breakpoints, sections, content collections, responsive preview, HTML/CSS export | in progress | Engine HTML/CSS export implemented (`dp-io::website`, 6 tests): frames→sections, flat absolute layers, real text, inline-SVG vectors, prototype `navigate_to`→anchor hotspots, explicit warnings. Breakpoints, content collections and responsive preview UI pending |
+| W5 | Website publishing backend: actual deploy workflow, custom-domain config | in progress | Backend publishing implemented and unit-tested (apps/backend routes/publish.rs + services/publish_export + `published_sites`/`projects` tables, HTML-only static render, share-slug URL). Custom domains/CDN/deploy verification blocked: Docker + PostgreSQL are not available on this host |
 
 ## Platform features (Phase 7)
 
@@ -157,14 +157,14 @@ Last updated: session 15 (plugins + AI subsystems implemented with op-scoped san
 | X1 | AI subsystem: provider abstraction, validated op proposals, confirmation/undo, optional | implemented | `dp-ai`: deterministic offline provider + optional OpenAI-compatible HTTP provider behind `http` feature (env-only config, no hardcoded keys); intent schema → validated against the document → undoable transactions; deletions require explicit confirmation; 19 tests. UI (M5) and live remote-provider test with a real key are pending |
 | X2 | Plugin architecture: manifests, permissions, sandboxed ops, commands/panels, lifecycle, docs + examples | implemented | `dp-plugins`: schema-v1 manifest validation, declared permissions/grants, op-scoped sandbox (no FS/network/arbitrary code), command/panel/event registries, lifecycle + panic isolation (`catch_unwind`), typed settings, example plugin + README; 23 tests. Third-party JS/WASM runtime not implemented — handlers are host-provided; no marketplace |
 | X3 | Integrations: GitHub/issues/design APIs/AI tool hooks | planned | |
-| X4 | Import/export: SVG, PNG, JPEG, PDF, HTML/CSS, image import, clipboard | planned | |
+| X4 | Import/export: SVG, PNG, JPEG, PDF, HTML/CSS, image import, clipboard | in progress | SVG/PNG/JPEG/PDF and website HTML+CSS export implemented (`dp-io`, editor `export_html`, IPC `export_html` capability). Image import and clipboard interop still pending (honest unsupported in IPC) |
 | X5 | PowerPoint subset import/export (documented) | planned | |
 
 ## Quality & performance (Phase 8)
 
 | # | Feature | Status | Evidence / notes |
 |---|---|---|---|
-| Q1 | Unit + integration tests across crates and server | implemented | engine + desktop IPC: 13 crates, **320 tests** in the last full run (geom 44, model 72, text 13, layout 12, render 20, io 9, persist 13, editor 40, collab 23, prototype 18, devmode 14, ai 19, plugins 23); backend: 132 unit tests green (`cargo test -p iconcrafter-server --offline --lib`); DB/WS integration tests are `#[ignore]` until Docker/Postgres is available |
+| Q1 | Unit + integration tests across crates and server | implemented | engine + desktop IPC: 13 crates, **326 tests** in the last full run (geom 44, model 72, text 13, layout 12, render 20, io 9, persist 13, editor 40, collab 23, prototype 18, devmode 14, ai 19, plugins 23); backend: 132 unit tests green (`cargo test -p iconcrafter-server --offline --lib`); DB/WS integration tests are `#[ignore]` until Docker/Postgres is available |
 | Q2 | Benchmarks for large documents (10k nodes), reported numbers | implemented | `crates/dp-editor/examples/bench_editor.rs` builds 10,500 nodes and measures layout/render/hit-test/serialize/undo; measured numbers and honest gaps in docs/PERFORMANCE.md (render ~47 ms/frame in dev profile is above the 16 ms target — optimization listed next) |
 | Q3 | Dependency audit, secret scan, security review | in progress | no hardcoded secrets (env-based config); backend uses Argon2id/opaque session tokens; `cargo tree -d` duplicates reviewed but no vuln scanner run yet |
 | Q4 | Installers (Windows MSI/NSIS), upgrade path, reproducibility | planned | |

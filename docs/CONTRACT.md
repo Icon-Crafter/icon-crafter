@@ -527,3 +527,28 @@ so arbitrary plugins cannot execute code; the UI manager panel arrives with the
 frontend milestone 5. AI prose quality depends on the selected provider; the
 offline provider returns deterministic structured layouts and honest
 "offline analysis" prose, not simulated model output.
+
+## 15. Website export (v1.7 addendum, session 16)
+
+One additive Tauri command:
+
+| command | args | result |
+|---|---|---|
+| `export_html` | `{directory: string, frame_id?: string}` | `{path, bytes, format: "html"}` — writes `index.html` + `styles.css` into `directory` (created if missing); `frame_id` exports only that frame, otherwise the active page |
+
+`bootstrap.capabilities` gains `"export_html": true`.
+
+Behaviour (implemented in `dp_io::website`, 6 integration tests):
+- every top-level frame becomes `<section class="ic-section">` (non-frame roots get a wrapper
+  section plus a warning); layers are flat absolutely-positioned elements inside that section;
+- text is real, selectable text with the resolved font/line-height/letter-spacing/colour;
+- ellipse/rect/star/polygon/vector geometry becomes CSS boxes / inline `<svg>` paths;
+- click `navigate_to` interactions become `<a class="ic-hotspot" href="#target-section">`
+  hot-spots (other actions and other trigger types are not exported yet);
+- CSS includes `@media (max-width: 900px)` clamping sections to the viewport.
+
+Honest limitations (also emitted as engine warnings when they apply): fixed-pixel geometry
+(no responsive re-layout), image layers are empty `<img>` placeholders (asset bytes are not
+exported yet), boolean/line geometry becomes boxes, gradients/blend modes are approximated,
+inner shadows and blurs are omitted. The export dialog/panel arrives with the frontend
+milestone that follows; until then the command is verified through engine tests and IPC.

@@ -42,6 +42,7 @@ pub fn run() {
             ipc::export_png,
             ipc::export_svg,
             ipc::export_pdf,
+            ipc::export_html,
             ipc::import_svg,
             ipc::import_image,
             ipc::set_preference,

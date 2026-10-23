@@ -183,6 +183,15 @@ pub struct ExportVectorArgs {
     pub path: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ExportWebsiteArgs {
+    /// Output directory for `index.html` + `styles.css` (created if needed).
+    pub directory: String,
+    /// Export only this frame instead of the whole active page.
+    #[serde(default)]
+    pub frame_id: Option<String>,
+}
+
 impl PointerInputArgs {
     fn to_engine(&self) -> Result<PointerInput, IpcError> {
         let kind = match self.kind.as_str() {
@@ -330,6 +339,7 @@ pub fn bootstrap(state: State<'_, IpcState>) -> Result<Value, IpcError> {
             "gpu": false,
             "dev_mode": true,
             "export_pdf": true,
+            "export_html": true,
             "export_scope": true,
             "import_svg": true,
             "import_image": false,
@@ -546,6 +556,22 @@ pub fn export_pdf(state: State<'_, IpcState>, args: ExportVectorArgs) -> Result<
             "path": saved.display().to_string(),
             "bytes": file_size(&saved),
             "format": "pdf",
+        }))
+    })
+}
+
+#[tauri::command]
+pub fn export_html(
+    state: State<'_, IpcState>,
+    args: ExportWebsiteArgs,
+) -> Result<Value, IpcError> {
+    let frame = parse_optional_id(args.frame_id, "frame id")?;
+    with_editor(&state, |editor| {
+        let index = editor.export_html(&args.directory, frame)?;
+        Ok(json!({
+            "path": index.display().to_string(),
+            "bytes": file_size(&index),
+            "format": "html",
         }))
     })
 }

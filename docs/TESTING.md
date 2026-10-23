@@ -292,3 +292,20 @@ UI checks for milestone 5 (frontend): AI assistant panel (prompt, proposal
 summary, warnings, apply/confirm/discard), plugin manager (install example,
 enable/disable, remove, typed settings, permissions display), capability gating
 from `bootstrap.capabilities.ai/plugins`.
+
+## Session 16 verification — website HTML/CSS export
+
+```powershell
+cargo test -p dp-io --no-default-features     # 15 passed (9 io integration + 6 website)
+cargo check -p iconcrafter-desktop            # EXIT 0 (export_html command registered)
+cargo clippy -p dp-io --no-default-features --all-targets -- -D warnings
+```
+
+Expected engine total in the last full run: **326** tests (geom 44, model 72, text 13,
+layout 12, render 20, io 15, persist 13, editor 40, collab 23, prototype 18, devmode 14,
+ai 19, plugins 23) + backend 132 unit tests.
+
+IPC smoke test (desktop): invoke `export_html` with `{directory: "C:/tmp/site-export"}`
+after drawing a frame; `index.html` and `styles.css` must exist and the HTML must contain
+the frame's text. Without a frame argument the active page exports; with a missing frame
+id the command returns a validation error.

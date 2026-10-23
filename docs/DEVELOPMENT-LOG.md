@@ -405,3 +405,29 @@ engine test count (266 actual vs 332 claimed). Both crates are now implemented:
   plugins cannot run third-party JavaScript/WASM (host-provided handlers only);
   no plugin marketplace. These are recorded in the checklist rather than
   presented as finished.
+
+## Session 16 (2026-10-24) — website HTML/CSS export
+
+Scope: implement the engine side of the website-design workflow (brief §15) and the
+HTML/CSS part of §18, without pretending it is a production site generator.
+
+- New `crates/dp-io/src/website.rs`: `WebsiteOptions`, `WebsiteExport`, `export_website`
+  and `write_website` (writes `index.html` + `styles.css`). Frames become sections, layers
+  become absolutely-positioned elements using world matrices relative to the section root,
+  text is real text, vectors/polygons/stars become inline SVG, and click+`navigate_to`
+  prototype interactions become anchor hot-spots. Hidden layers are skipped. All
+  unsupported features are surfaced through `warnings` instead of being silently dropped.
+- Editor: `EditorState::export_html(directory, frame_id?)` (validates the frame, chooses the
+  page, writes the bundle, updates status). IPC: `export_html {directory, frame_id?}` plus
+  `capabilities.export_html = true`, registered in the desktop handler.
+- Tests: `crates/dp-io/tests/website.rs` — 6 integration tests (sections/text/CSS/vector
+  SVG, navigation hot-spots, image placeholder warnings, file writing, empty-page error,
+  frame-scoped export). `cargo test -p dp-io --no-default-features` → 15 passed (9
+  existing + 6 website). `cargo check -p iconcrafter-desktop` clean.
+- Docs: CONTRACT §15 (command/limitations), checklist W4/W5/X4 rows, TESTING session 16.
+  Engine total is now 326 tests.
+- Known limitations kept honest: no responsive layout engine in exported HTML, no image
+  asset emission, gradients approximated, only click/navigate hot-spots, publishing is
+  backend-only and unverified without Docker/PostgreSQL infrastructure.
+- Next: responsive breakpoints/preview, image import, collaboration transport, remaining
+  workspaces (whiteboard/slides/drawing), packaging and hardening.
