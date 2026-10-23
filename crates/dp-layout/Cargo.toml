@@ -7,6 +7,7 @@ license.workspace = true
 description = "Deterministic auto-layout engine: direction, spacing, padding, alignment, hug/fill/fixed sizing, wrapping, constraints, nested layouts"
 
 [dependencies]
+dp-geom = { path = "../dp-geom" }
 dp-model = { path = "../dp-model" }
 dp-text = { path = "../dp-text" }
 serde = { workspace = true }

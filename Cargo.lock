@@ -1771,6 +1771,7 @@ dependencies = [
 name = "dp-layout"
 version = "0.1.0"
 dependencies = [
+ "dp-geom",
  "dp-model",
  "dp-text",
  "serde",
@@ -1865,6 +1866,7 @@ name = "dp-text"
 version = "0.1.0"
 dependencies = [
  "cosmic-text",
+ "dp-geom",
  "dp-model",
  "glam",
  "serde",
@@ -3284,6 +3286,7 @@ dependencies = [
  "dp-collab",
  "dp-model",
  "futures",
+ "getrandom 0.4.3",
  "hex",
  "indexmap 2.14.2",
  "opentelemetry",
@@ -3302,6 +3305,7 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "url",
  "uuid",
 ]
 
@@ -6365,6 +6369,7 @@ dependencies = [
  "sqlx-postgres",
  "sqlx-sqlite",
  "syn 2.0.119",
+ "thiserror 2.0.21",
  "tokio",
  "url",
 ]
@@ -7465,6 +7470,7 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

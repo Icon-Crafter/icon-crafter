@@ -363,3 +363,31 @@ preserved component keys for cross-document instance resolution) and validates r
   feature checklist.
 * Text-on-path references a sibling path node; circular references are rejected.
 * Schema v1 is not Figma-compatible and does not claim to read `.fig` files.
+
+## 5. Implementation notes (v1.1, dp-model as shipped)
+
+The Rust model in `crates/dp-model` implements the schema above with these deliberate
+deviations, which are the authoritative behaviour of the current build:
+
+* **Coordinates are `f64`**, not `f32`, throughout `Point`/`Size`/`Rect`/`Mat2D` and all
+  node properties. Precision matters for deep zoom and repeated transforms; the renderer
+  converts to `f32` only at the GPU boundary.
+* **`Document.kind`** (`design` | `whiteboard` | `slides` | `site` | `illustration`) was
+  added so one document format can serve the editor and the other workspaces. It defaults
+  to `design` on deserialize, so earlier v1 files remain valid.
+* **`Document.settings.active_modes`** (`map<collection_id, mode_id>`) stores the active
+  variable mode per collection for theme switching. Missing entries fall back to the
+  collection default mode.
+* **`Document.prototype.flows`** use `FlowId` (in addition to the flow name) so shareable
+  prototype links can target a stable flow identity.
+* **Canonical JSON**: `Document::to_json_string()` serializes through `serde_json::Value`,
+  so object keys are emitted in a stable (sorted) order. Two documents with equal content
+  produce identical bytes; the `.icraft` container and content-addressed version snapshots
+  rely on this. `from_json_*` accepts any key order.
+* **`Document.revision`/`updated_at`** are bumped by the engine on every committed
+  transaction (`Document::touch`), not on every keystroke inside a transaction.
+* **Path anchors** serialize as `{ "p": [x, y], "in": [x, y], "out": [x, y], "smooth": bool }`
+  where `in`/`out` are omitted when they equal `p`; `smooth` defaults to `false`.
+* **Node `rev`** is bumped by edits and used by the collaboration layer to detect
+  concurrent modifications; it is not a version-history revision.
+

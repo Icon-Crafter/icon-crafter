@@ -231,3 +231,61 @@ leave the document untouched; they never panic the app.
 * File dialogs (Tauri dialog plugin) and drag-and-drop file paths.
 * Theme (dark by default), density, and font-size preferences.
 * Presentation shells for prototype preview / Dev Mode (Rust supplies the data/render).
+
+## 7. v1.1 addendum — bootstrap, viewport and command argument conventions (frozen)
+
+This section is authoritative where §4 is thinner. All JSON field names are `snake_case`
+(Rust serde defaults; the UI must not camelCase IPC payloads).
+
+### 7.1 Bootstrap
+
+```ts
+interface Bootstrap {
+  app_version: string;                    // CARGO_PKG_VERSION
+  recent_files: { path: string; name: string }[];
+  preferences: Record<string, unknown>;   // opaque UI prefs (theme/density/shortcuts)
+  capabilities: Record<string, unknown>;  // honest feature flags: { ai, plugins, dev_mode, export_pdf, collab }
+}
+```
+
+### 7.2 Viewport
+
+`set_viewport { width, height, dpr }` — CSS pixels plus devicePixelRatio of the canvas
+area; the engine keeps its own pan (`x`,`y`) and `zoom` and returns a fresh frame. The UI
+calls this on resize and DPR change.
+
+### 7.3 Selection
+
+`select_nodes { ids: string[], additive?: boolean }` — selects by id (unknown ids are
+ignored, not an error). Engine keeps the canonical selection; UI mirrors `EngineState.selection`.
+
+### 7.4 Pages
+
+`set_active_page { page_id }`, `add_page { name? }`, `rename_page { page_id, name }`,
+`delete_page { page_id }` — deleting the last remaining page returns a validation error.
+
+### 7.5 Command arguments
+
+Where `ids?` is omitted the current selection is used; commands that need more ids than
+are selected return a `validation` error and never touch the document.
+
+| Command | Arguments |
+|---|---|
+| `rename_node` | `{ id, name }` |
+| `toggle_visible` / `toggle_locked` | `{ ids? }` |
+| `set_opacity` | `{ ids?, opacity }` (0..1, clamped) |
+| `nudge` | `{ dx, dy, ids? }` |
+| `align` | `{ ids?, align: "left"\|"hcenter"\|"right"\|"top"\|"vcenter"\|"bottom" }` (>=2 ids) |
+| `distribute` | `{ ids?, axis: "horizontal"\|"vertical", spacing: number }` (spacing `0` = equal gaps; >=3 ids) |
+| `boolean` | `{ ids?, op: "union"\|"subtract"\|"intersect"\|"exclude" }` (first id is the base for subtract) |
+| `pan_by` | `{ dx, dy }` (world units) |
+| `zoom_to` | `{ zoom }` (clamped 0.01..64, anchored at viewport centre) |
+| `text_edit_begin` | `{ node_id }` |
+| `text_edit_input` | `{ characters, caret, selection: [number, number] \| null }` |
+| `text_edit_set_caret` | `{ caret, selection: [number, number] \| null }` |
+| `text_edit_commit` / `text_edit_cancel` | `{}` |
+
+The earlier §4 `distribute` spelling `spacing: "gap"|"center"` is superseded by the
+numeric form above. Group/boolean operand order follows the engine selection order; the
+UI must show that order (it is the z-order of the selection).
+

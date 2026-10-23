@@ -7,7 +7,7 @@ tested) · **verified** (verified end-to-end in the running app) · **blocked** 
 Rule: a feature is never marked implemented/verified because a button exists. Each row
 names the verification evidence in the development log or a test.
 
-Last updated: session 1 (scaffold + architecture).
+Last updated: session 2 (engine foundation: dp-geom + dp-model, UI shell, backend started).
 
 ## Foundation
 
@@ -15,12 +15,16 @@ Last updated: session 1 (scaffold + architecture).
 |---|---|---|---|
 | F1 | Rust workspace (14 members), pinned toolchain, shared profiles | verified | `cargo metadata --no-deps`, initial commit |
 | F2 | Tauri desktop shell + config + capabilities + icons | implemented | builds once UI exists; window not yet launched |
-| F3 | Axum backend skeleton | in-progress | routes land in backend phase |
+| F3 | Axum backend skeleton | in-progress | server teammate building real auth/teams/files/comments/versions/WS (backend-api) |
 | F4 | Docker compose for Postgres/MinIO/Redis | planned | Docker is not installed on the dev host; documented gap |
 | F5 | Architecture, document format, collaboration protocol docs | implemented | `docs/ARCHITECTURE.md`, `DOCUMENT-FORMAT.md`, `COLLAB-PROTOCOL.md` |
 | F6 | Contract + design system docs | implemented | `docs/CONTRACT.md`, `DESIGN-SYSTEM.md` |
 | F7 | CI-ready commands documented (fmt/clippy/test/build) | implemented | `docs/TESTING.md`, root README |
 | F8 | Feature checklist / dev log / release checklist | implemented | this file + `DEVELOPMENT-LOG.md`, `RELEASE-CHECKLIST.md` |
+| F9 | `dp-geom`: transforms, Bezier paths, primitives, booleans, spatial index, snapping | verified | `cargo test -p dp-geom` → 44 passed (2026-10-23) |
+| F10 | `dp-model`: document model, styles, variables, components, prototype model, transactions/undo, command ops, validation, canonical schema-v1 JSON | verified | `cargo test -p dp-model` → 65 passed (2026-10-23) |
+| F11 | `dp-text`: system font catalog + missing-font detection, cosmic-text shaping, wrapping/max-lines, glyph runs and rasterization, layout cache | verified | `cargo test -p dp-text` → 13 passed (2026-10-23) |
+| F12 | `dp-layout`: deterministic auto layout (hug/fill/fixed, gap/padding, alignment, wrap, item-reverse, min/max, nested, text-driven hug) | verified | `cargo test -p dp-layout` → 12 passed (2026-10-23) |
 
 ## Design editor — Phase 3 vertical slice
 
