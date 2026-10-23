@@ -1,8 +1,46 @@
-//! Plugin host for Icon Crafter.
+//! Plugin host for Icon Crafter: manifests, declared permissions, an op-scoped
+//! sandbox, commands/panels/events, lifecycle and error isolation.
 //!
-//! Plugins never receive ambient authority. A plugin declares permissions in
-//! its manifest and interacts with the document through a request/response API
-//! whose every operation is validated and applied as an undoable transaction.
+//! ## Security model
+//!
+//! Plugins are **data**, not code. A manifest declares identity, API version,
+//! permissions, commands, panels, event subscriptions and settings. The
+//! executable half lives in the host: a [`PluginHandler`] may only issue typed
+//! [`SandboxRequest`]s, each authorized against the plugin's granted and
+//! declared permissions, validated against the live document, and turned into
+//! *proposals* the editor applies as normal undoable transactions after
+//! confirmation.
+//!
+//! This deliberately does **not** run arbitrary JavaScript/WASM, provide
+//! filesystem/network access, or grant ambient document access. A future WASM
+//! sandbox can reuse the same request/authorization surface.
+//!
+//! ## Example plugin
+//!
+//! See `crates/dp-plugins/examples/hello-plugin/` for a manifest-only example.
+
+pub mod executor;
+pub mod manifest;
+pub mod permissions;
+pub mod registry;
+pub mod sandbox;
+
+pub use executor::{
+    dispatch_event, run_command, ExecutionReport, HandlerCall, PluginErrorRecord, PluginHandler,
+    MAX_REQUESTS_PER_CALL,
+};
+pub use manifest::{
+    ManifestError, PluginCommand, PluginEvent, PluginManifest, PluginPanel, PluginSetting,
+    MANIFEST_VERSION, MAX_COMMANDS, MAX_PANELS, MAX_SETTINGS,
+};
+pub use permissions::{Grants, Permission, API_VERSION as PLUGIN_API_VERSION};
+pub use registry::{
+    PluginRegistry, PluginState, RegisteredPlugin, RegistryError, MAX_PLUGINS,
+};
+pub use sandbox::{
+    execute, validate_setting_value, SandboxContext, SandboxError, SandboxProposal, SandboxRequest,
+    SandboxResponse, MAX_NODES_PER_PROPOSAL, MAX_NODES_PER_REQUEST, MAX_STRING_BYTES,
+};
 
 /// Version of the plugin host API surface.
-pub const PLUGINS_VERSION: &str = "0.1.0";
+pub const PLUGIN_VERSION: &str = "0.1.0";

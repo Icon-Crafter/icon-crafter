@@ -324,8 +324,8 @@ pub fn bootstrap(state: State<'_, IpcState>) -> Result<Value, IpcError> {
         "recent_files": inner.recent,
         "preferences": Value::Object(inner.preferences.clone()),
         "capabilities": {
-            "ai": false,
-            "plugins": false,
+            "ai": true,
+            "plugins": true,
             "collab": false,
             "gpu": false,
             "dev_mode": true,
@@ -737,6 +737,116 @@ pub fn prototype_stop(state: State<'_, IpcState>) -> Result<Value, IpcError> {
 pub fn prototype_back(state: State<'_, IpcState>) -> Result<Value, IpcError> {
     with_editor(&state, |editor| {
         editor.prototype_back()?;
+        snapshot_json(editor)
+    })
+}
+
+// ---------------------------------------------------------------------------
+// AI assistance (validated intents, undoable transactions, explicit apply)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn ai_generate_layout(
+    state: State<'_, IpcState>,
+    prompt: String,
+    width: Option<u32>,
+    height: Option<u32>,
+) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        editor.ai_generate_layout(&prompt, width.unwrap_or(1440), height.unwrap_or(900))?;
+        snapshot_json(editor)
+    })
+}
+
+#[tauri::command]
+pub fn ai_apply_last(state: State<'_, IpcState>, confirmed: Option<bool>) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        editor.ai_apply_last_proposal(confirmed.unwrap_or(false))?;
+        snapshot_json(editor)
+    })
+}
+
+#[tauri::command]
+pub fn ai_discard_last(state: State<'_, IpcState>) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        editor.ai_discard_proposal();
+        snapshot_json(editor)
+    })
+}
+
+#[tauri::command]
+pub fn ai_rename_layers(state: State<'_, IpcState>) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        editor.ai_rename_layers()?;
+        snapshot_json(editor)
+    })
+}
+
+#[tauri::command]
+pub fn ai_text_task(
+    state: State<'_, IpcState>,
+    task: String,
+    input: String,
+) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        editor.ai_text_task(&task, &input)?;
+        snapshot_json(editor)
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Plugins (registry management; execution is op-scoped and host-provided)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn plugin_install(state: State<'_, IpcState>, manifest: Value) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        let text = match manifest.clone() {
+            Value::String(text) => text,
+            other => other.to_string(),
+        };
+        editor.plugin_install_json(&text)?;
+        snapshot_json(editor)
+    })
+}
+
+#[tauri::command]
+pub fn plugin_install_example(state: State<'_, IpcState>) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        editor.plugin_install_example()?;
+        snapshot_json(editor)
+    })
+}
+
+#[tauri::command]
+pub fn plugin_remove(state: State<'_, IpcState>, plugin_id: String) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        editor.plugin_remove(&plugin_id)?;
+        snapshot_json(editor)
+    })
+}
+
+#[tauri::command]
+pub fn plugin_set_enabled(
+    state: State<'_, IpcState>,
+    plugin_id: String,
+    enabled: bool,
+) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        editor.plugin_set_enabled(&plugin_id, enabled)?;
+        snapshot_json(editor)
+    })
+}
+
+#[tauri::command]
+pub fn plugin_set_setting(
+    state: State<'_, IpcState>,
+    plugin_id: String,
+    key: String,
+    value: Value,
+) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        editor.plugin_set_setting(&plugin_id, &key, value)?;
         snapshot_json(editor)
     })
 }

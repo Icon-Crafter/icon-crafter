@@ -1,4 +1,4 @@
-# Development log
+﻿# Development log
 
 Chronological record of work, decisions and verification. Add an entry for every
 meaningful step; keep claims tied to commands or manual checks.
@@ -348,7 +348,7 @@ deleted `target/debug/incremental` (3.42 GB) while investigating.
 
 - Added `crates/dp-editor/examples/bench_editor.rs` (10,500-node document: 500 frames Ã— 20 children) measuring layout, bounds lookups, 1440Ã—900 render, pointer clicks, canonical JSON round-trip and delete+undo. Numbers and honest assessment in `docs/PERFORMANCE.md` (render is the remaining gap: ~54 ms/frame dev profile).
 - Optimization: hit testing and marquee selection now use a `dp_geom::SpatialGrid<NodeId>` built together with the layout cache (invalidated on document change). 200 click pairs: 395.8 ms â†’ 241.4 ms (~39% faster, ~1.2 ms/click). Layout/index rebuild cost: 11.7 ms cold for 10,500 nodes.
-- Full engine suite re-run green: 13 crates, 332 tests (counts per crate in docs/FEATURE-CHECKLIST.md Q1); backend unit suite re-run after the model changes: 132 passed.
+- Full engine suite re-run green: 13 crates, 266 tests (counts per crate in docs/FEATURE-CHECKLIST.md Q1); backend unit suite re-run after the model changes: 132 passed.
 - Dev Mode verified natively in the Tauri window (real Inspect metrics + generated CSS), screenshots in artifacts/devmode-native-inspect.png / devmode-native-code.png.
 - Next: overlay rebuild cost, scene culling via spatial index, then frontend milestone 4 integration (design systems + prototype authoring/presentation UI).
 
@@ -367,3 +367,41 @@ deleted `target/debug/incremental` (3.42 GB) while investigating.
 - Verified the standalone app with the Vite dev server stopped: window loads `http://tauri.localhost/` (embedded apps/ui/dist), IPC works, and a full vertical-slice script passed: create rectangle via pointer input, save `.icraft` (1150 bytes, revision 2, dirty cleared), export PNG (896-byte header `89504E47`), SVG (editable `<path>` with fill #d9d9d9), PDF (`%PDF-1.7`), then reopen the saved file (1 node, revision 2, no errors). Screenshot: artifacts/standalone-release.png; exports: artifacts/standalone-test.{icraft,png,svg,pdf}.
 - Benchmarks rerun after fixing the per-frame layout rebuild: click ≈0.98 ms (spatial index), render ≈42 ms/frame (still above the 16 ms target, documented), layout 10.3 ms cold, serialize 111.7 ms. docs/PERFORMANCE.md updated.
 - Next: verify the UI's milestone-4 feature set in the standalone window once the frontend reports completion; then collaboration transport wiring and remaining Phase-6/7 items.
+
+## Session 15 (2026-10-24) — honest plugins + AI subsystems
+
+Goal: replace the two remaining stubs (`dp-plugins`, `dp-ai`) with real,
+tested subsystems, because the feature checklist had started to overstate the
+engine test count (266 actual vs 332 claimed). Both crates are now implemented:
+
+- `dp-ai` (19 tests, strict clippy clean): provider trait with a deterministic
+  offline provider (real prompt → intent rules for login/dashboard/generic
+  layouts) and an optional OpenAI-compatible provider behind the `http`
+  feature (env-only key configuration). Models return JSON intents; the module
+  validates every intent against the document (ids, frames, colours, limits)
+  and builds ordinary `dp_model::Transaction`s against a clone, so a proposal
+  is side-effect free until applied. Applying goes through
+  `ops::apply_transaction`, so every AI change is undoable; deletions set
+  `requires_confirmation` and are refused without `confirmed: true`.
+- `dp-plugins` (23 tests, strict clippy clean): manifest schema v1 validation,
+  declared permissions + user grants (write implies read), an op-scoped sandbox
+  (document summary/selection/node/page/variable reads and insert/patch/delete
+  proposals — no filesystem, network or arbitrary code), command/panel/event
+  registries, lifecycle state with panic isolation (`catch_unwind`), typed
+  settings validation, and a bundled example plugin + README.
+- Editor/IPC wiring: `EditorState` gained `last_ai_proposal` + `plugins`; new
+  `assist.rs` implements `ai_generate_layout`, `ai_apply_last_proposal`,
+  `ai_discard_proposal`, `ai_rename_layers`, `ai_text_task` and plugin registry
+  operations; `commands.rs` dispatches the new command names and the snapshot
+  exposes additive `ai_preview` and `plugins`; Tauri IPC registers
+  `ai_*`/`plugin_*` commands and `bootstrap.capabilities` now honestly reports
+  `ai: true, plugins: true`. `cargo check -p iconcrafter-desktop` is clean.
+- Verification: `cargo test -p dp-ai` 19, `-p dp-plugins` 23, `-p dp-editor`
+  40 (lib 6 + contract additions 2 + editor 23 + AI/plugins 6 + prototype 3);
+  strict clippy clean for all three crates; docs checklist corrected to the
+  measured **320 engine tests**.
+- Known limitations: no in-app AI chat panel or plugin manager UI yet
+  (frontend milestone 5); remote provider not exercised without an API key;
+  plugins cannot run third-party JavaScript/WASM (host-provided handlers only);
+  no plugin marketplace. These are recorded in the checklist rather than
+  presented as finished.

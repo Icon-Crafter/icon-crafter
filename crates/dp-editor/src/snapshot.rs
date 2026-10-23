@@ -280,6 +280,44 @@ pub struct SnapshotPrototype {
 
 /// The complete engine state returned by `engine_state` and every mutating
 /// command.
+/// Pending AI proposal shown in the assistant panel (never auto-applied).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SnapshotAiPreview {
+    /// Provider id that produced the proposal (e.g. "offline").
+    pub source: String,
+    /// One-line summary per intent, in order.
+    pub summary: Vec<String>,
+    /// Non-fatal warnings from validation.
+    pub warnings: Vec<String>,
+    /// Whether applying the proposal requires explicit confirmation.
+    pub requires_confirmation: bool,
+    /// Number of undoable steps.
+    pub steps: usize,
+}
+
+/// One installed plugin row.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SnapshotPlugin {
+    /// Plugin id.
+    pub id: String,
+    /// Display name.
+    pub name: String,
+    /// Version string.
+    pub version: String,
+    /// Description (may be empty).
+    pub description: String,
+    /// Whether the plugin is enabled.
+    pub enabled: bool,
+    /// "disabled" | "enabled" | "error".
+    pub state: String,
+    /// Last execution error, if the registry isolated one.
+    pub last_error: Option<String>,
+    /// Current settings values.
+    pub settings: serde_json::Value,
+    /// Full validated manifest for the detail view.
+    pub manifest: serde_json::Value,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
     pub doc: Option<SnapshotDocMeta>,
@@ -297,6 +335,10 @@ pub struct Snapshot {
     pub selection_details: Vec<SnapshotDetail>,
     pub text_edit: Option<SnapshotTextEdit>,
     pub prototype: Option<SnapshotPrototype>,
+    /// Pending AI proposal, if any.
+    pub ai_preview: Option<SnapshotAiPreview>,
+    /// Installed plugins.
+    pub plugins: Vec<SnapshotPlugin>,
     pub errors: Vec<SnapshotError>,
     pub status: Option<String>,
 }
@@ -324,6 +366,49 @@ impl EditorState {
             .collect();
         let viewport = self.viewport;
         let prototype = self.prototype_snapshot();
+        let ai_preview = self
+            .last_ai_proposal
+            .as_ref()
+            .map(|proposal| SnapshotAiPreview {
+                source: proposal.source.clone(),
+                summary: proposal.summary.clone(),
+                warnings: proposal.warnings.clone(),
+                requires_confirmation: proposal.requires_confirmation,
+                steps: proposal.steps.len(),
+            });
+        let plugins = self
+            .plugins
+            .plugins
+            .values()
+            .map(|plugin| {
+                let manifest =
+                    serde_json::to_value(&plugin.manifest).unwrap_or(serde_json::Value::Null);
+                let text = |key: &str| {
+                    manifest
+                        .get(key)
+                        .and_then(|value| value.as_str())
+                        .unwrap_or_default()
+                        .to_owned()
+                };
+                SnapshotPlugin {
+                    id: text("id"),
+                    name: text("name"),
+                    version: text("version"),
+                    description: text("description"),
+                    enabled: plugin.is_enabled(),
+                    state: match plugin.state {
+                        dp_plugins::PluginState::Disabled => "disabled",
+                        dp_plugins::PluginState::Enabled => "enabled",
+                        dp_plugins::PluginState::Error => "error",
+                    }
+                    .to_owned(),
+                    last_error: plugin.last_error.clone(),
+                    settings: serde_json::to_value(&plugin.settings)
+                        .unwrap_or(serde_json::Value::Null),
+                    manifest,
+                }
+            })
+            .collect();
         Snapshot {
             doc: Some(SnapshotDocMeta {
                 id: self.document.id.to_string(),
@@ -353,6 +438,8 @@ impl EditorState {
             selection_details,
             text_edit,
             prototype,
+            ai_preview,
+            plugins,
             errors,
             status: if self.status.is_empty() {
                 None
@@ -387,6 +474,8 @@ impl EditorState {
             selection_details: Vec::new(),
             text_edit: None,
             prototype: None,
+            ai_preview: None,
+            plugins: Vec::new(),
             errors: Vec::new(),
             status: None,
         }

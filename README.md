@@ -65,3 +65,17 @@ docker/           Local backend stack
 ## License
 
 MIT OR Apache-2.0.
+
+## Optional AI and plugins
+
+The editor is fully usable offline. Two optional subsystems are built in:
+
+- **AI assistance** (`dp-ai`) — a deterministic offline provider ships by
+  default; an OpenAI-compatible provider is available when built with the
+  `http` feature and configured through `ICONCRAFTER_AI_ENDPOINT`,
+  `ICONCRAFTER_AI_MODEL`, `ICONCRAFTER_AI_KEY`. AI output is schema-validated
+  and applied as undoable transactions; destructive changes need confirmation.
+- **Plugins** (`dp-plugins`) — validated manifests, declared permissions and
+  user grants, op-scoped sandbox, lifecycle and typed settings. Execution is
+  host-provided (no third-party JS/WASM runtime yet); see
+  `crates/dp-plugins/examples/hello-plugin/` and `docs/FEATURE-CHECKLIST.md`.

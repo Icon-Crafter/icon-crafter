@@ -57,6 +57,16 @@ pub fn run() {
             ipc::prototype_play,
             ipc::prototype_stop,
             ipc::prototype_back,
+            ipc::ai_generate_layout,
+            ipc::ai_apply_last,
+            ipc::ai_discard_last,
+            ipc::ai_rename_layers,
+            ipc::ai_text_task,
+            ipc::plugin_install,
+            ipc::plugin_install_example,
+            ipc::plugin_remove,
+            ipc::plugin_set_enabled,
+            ipc::plugin_set_setting,
         ])
         .setup(|app| {
             tracing::info!(

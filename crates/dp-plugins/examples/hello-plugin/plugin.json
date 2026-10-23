@@ -1,0 +1,34 @@
+{
+  "manifest_version": 1,
+  "id": "hello-icon-crafter",
+  "name": "Hello Icon Crafter",
+  "version": "1.0.0",
+  "api_version": 1,
+  "description": "Example op-scoped plugin: reads the document summary and proposes a label node. Host code supplies the executable half; this manifest declares only data.",
+  "author": "Icon Crafter",
+  "homepage": "https://example.invalid/iconcrafter/plugins/hello",
+  "permissions": ["read_document", "write_document"],
+  "commands": [
+    {
+      "id": "insert-label",
+      "title": "Insert hello label",
+      "description": "Proposes a text node with a greeting on the active page."
+    }
+  ],
+  "panels": [],
+  "events": ["document_changed"],
+  "settings": [
+    {
+      "type": "string",
+      "id": "greeting",
+      "label": "Greeting text",
+      "default": "Hello from a plugin"
+    },
+    {
+      "type": "boolean",
+      "id": "uppercase",
+      "label": "Uppercase",
+      "default": false
+    }
+  ]
+}

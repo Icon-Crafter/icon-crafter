@@ -724,10 +724,8 @@ impl EditorState {
     /// Hit tests a world point against visible layers (topmost first).
     pub fn hit_test(&mut self, world: Point) -> Option<NodeId> {
         self.ensure_layout();
-        let order: Vec<NodeId> = match self.layout_cache.as_ref() {
-            Some(layout) => layout.order().to_vec(),
-            None => return None,
-        };
+        let layout = self.layout_cache.as_ref()?;
+        let order: Vec<NodeId> = layout.order().to_vec();
         let candidates = match self.hit_index.as_ref() {
             Some(index) => index.query_point(world),
             None => Vec::new(),

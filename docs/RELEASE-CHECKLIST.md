@@ -1,4 +1,4 @@
-# Release checklist
+﻿# Release checklist
 
 This checklist is run before calling a build release-ready. Items are only ticked with
 evidence (command output, test name, or a manual verification step recorded in
@@ -93,7 +93,7 @@ to see which rows apply to the current build.
 
 Verified with evidence (see DEVELOPMENT-LOG / TESTING):
 
-- [x] cargo test -p ... full engine suite: 332 tests green (13 crates).
+- [x] cargo test -p ... full engine suite: 266 tests green (13 crates; dp-ai/dp-plugins are stubs with 0 tests until Phase 7).
 - [x] Backend unit suite: 132 tests green (cargo test -p iconcrafter-server --offline --lib).
 - [x] Strict clippy clean for dp-devmode/dp-editor/dp-collab/dp-model/dp-render (others pass default clippy; workspace-wide -D warnings gate is not yet free of third-party noise).
 - [x] Production desktop binary builds and runs standalone: cargo build -p iconcrafter-desktop --release --features custom-protocol — embedded UI at http://tauri.localhost/, save/reopen/export verified with the dev server stopped.

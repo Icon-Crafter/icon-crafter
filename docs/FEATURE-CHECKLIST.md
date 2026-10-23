@@ -1,4 +1,4 @@
-# Feature checklist
+﻿# Feature checklist
 
 Status legend: **planned** · **in-progress** · **implemented** (code exists, builds, unit
 tested) · **verified** (verified end-to-end in the running app) · **blocked** (with reason)
@@ -7,7 +7,7 @@ tested) · **verified** (verified end-to-end in the running app) · **blocked** 
 Rule: a feature is never marked implemented/verified because a button exists. Each row
 names the verification evidence in the development log or a test.
 
-Last updated: session 7 (design-system engine authoring: components, instances, shared styles, variables/modes; instance rendering; 253 engine tests green).
+Last updated: session 15 (plugins + AI subsystems implemented with op-scoped sandbox and validated intents; Dev Mode UI delivered; 320 engine tests green; standalone release verified).
 
 ## Foundation
 
@@ -154,8 +154,8 @@ Last updated: session 7 (design-system engine authoring: components, instances, 
 
 | # | Feature | Status | Evidence / notes |
 |---|---|---|---|
-| X1 | AI subsystem: provider abstraction, validated op proposals, confirmation/undo, optional | planned | |
-| X2 | Plugin architecture: manifests, permissions, sandboxed ops, commands/panels, lifecycle, docs + examples | planned | |
+| X1 | AI subsystem: provider abstraction, validated op proposals, confirmation/undo, optional | implemented | `dp-ai`: deterministic offline provider + optional OpenAI-compatible HTTP provider behind `http` feature (env-only config, no hardcoded keys); intent schema → validated against the document → undoable transactions; deletions require explicit confirmation; 19 tests. UI (M5) and live remote-provider test with a real key are pending |
+| X2 | Plugin architecture: manifests, permissions, sandboxed ops, commands/panels, lifecycle, docs + examples | implemented | `dp-plugins`: schema-v1 manifest validation, declared permissions/grants, op-scoped sandbox (no FS/network/arbitrary code), command/panel/event registries, lifecycle + panic isolation (`catch_unwind`), typed settings, example plugin + README; 23 tests. Third-party JS/WASM runtime not implemented — handlers are host-provided; no marketplace |
 | X3 | Integrations: GitHub/issues/design APIs/AI tool hooks | planned | |
 | X4 | Import/export: SVG, PNG, JPEG, PDF, HTML/CSS, image import, clipboard | planned | |
 | X5 | PowerPoint subset import/export (documented) | planned | |
@@ -164,7 +164,7 @@ Last updated: session 7 (design-system engine authoring: components, instances, 
 
 | # | Feature | Status | Evidence / notes |
 |---|---|---|---|
-| Q1 | Unit + integration tests across crates and server | implemented | engine + desktop IPC: 13 crates, **332 tests** in the last full run (geom 44, model 72, text 13, layout 12, render 6+11, io 9, persist 13, editor 28, collab 19, prototype 18, devmode 14, ai 36, plugins 37); backend: 132 unit tests green (`cargo test -p iconcrafter-server --offline --lib`); DB/WS integration tests are `#[ignore]` until Docker/Postgres is available |
+| Q1 | Unit + integration tests across crates and server | implemented | engine + desktop IPC: 13 crates, **320 tests** in the last full run (geom 44, model 72, text 13, layout 12, render 20, io 9, persist 13, editor 40, collab 23, prototype 18, devmode 14, ai 19, plugins 23); backend: 132 unit tests green (`cargo test -p iconcrafter-server --offline --lib`); DB/WS integration tests are `#[ignore]` until Docker/Postgres is available |
 | Q2 | Benchmarks for large documents (10k nodes), reported numbers | implemented | `crates/dp-editor/examples/bench_editor.rs` builds 10,500 nodes and measures layout/render/hit-test/serialize/undo; measured numbers and honest gaps in docs/PERFORMANCE.md (render ~47 ms/frame in dev profile is above the 16 ms target — optimization listed next) |
 | Q3 | Dependency audit, secret scan, security review | in progress | no hardcoded secrets (env-based config); backend uses Argon2id/opaque session tokens; `cargo tree -d` duplicates reviewed but no vuln scanner run yet |
 | Q4 | Installers (Windows MSI/NSIS), upgrade path, reproducibility | planned | |

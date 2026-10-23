@@ -630,6 +630,78 @@ impl EditorState {
                 let interaction_id: dp_model::InteractionId = json_field(args, "interaction_id")?;
                 Ok(self.remove_interaction(node_id, interaction_id)?)
             }
+            "ai_generate_layout" => {
+                let prompt: String = json_field(args, "prompt")?;
+                let width = args
+                    .get("width")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(1440)
+                    .min(10_000) as u32;
+                let height = args
+                    .get("height")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(900)
+                    .min(10_000) as u32;
+                self.ai_generate_layout(&prompt, width, height)?;
+                Ok(true)
+            }
+            "ai_apply_last" => {
+                let confirmed = args
+                    .get("confirmed")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                self.ai_apply_last_proposal(confirmed)?;
+                Ok(true)
+            }
+            "ai_discard_last" => Ok(self.ai_discard_proposal()),
+            "ai_rename_layers" => {
+                let applied = self.ai_rename_layers()?;
+                Ok(applied > 0)
+            }
+            "ai_text_task" => {
+                let task: String = json_field(args, "task")?;
+                let input: String = json_field(args, "input")?;
+                self.ai_text_task(&task, &input)?;
+                Ok(false)
+            }
+            "plugin_install" => {
+                let manifest = args.get("manifest").cloned().ok_or_else(|| {
+                    EditorError::InvalidArguments("missing 'manifest'".to_owned())
+                })?;
+                let text = match manifest {
+                    Value::String(text) => text,
+                    other => other.to_string(),
+                };
+                self.plugin_install_json(&text)?;
+                Ok(true)
+            }
+            "plugin_install_example" => {
+                self.plugin_install_example()?;
+                Ok(true)
+            }
+            "plugin_remove" => {
+                let plugin_id: String = json_field(args, "plugin_id")?;
+                self.plugin_remove(&plugin_id)?;
+                Ok(true)
+            }
+            "plugin_set_enabled" => {
+                let plugin_id: String = json_field(args, "plugin_id")?;
+                let enabled = args
+                    .get("enabled")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true);
+                self.plugin_set_enabled(&plugin_id, enabled)?;
+                Ok(true)
+            }
+            "plugin_set_setting" => {
+                let plugin_id: String = json_field(args, "plugin_id")?;
+                let key: String = json_field(args, "key")?;
+                let value = args.get("value").cloned().ok_or_else(|| {
+                    EditorError::InvalidArguments("missing 'value'".to_owned())
+                })?;
+                self.plugin_set_setting(&plugin_id, &key, value)?;
+                Ok(true)
+            }
             "dev_resolve_annotation" => {
                 let annotation_id: uuid::Uuid = json_field(args, "annotation_id")?;
                 Ok(self.dev_resolve_annotation(annotation_id))

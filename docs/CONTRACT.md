@@ -469,3 +469,61 @@ SnapshotPrototype {
 - `VariableValueJson` = `{"type":"color","color":{r,g,b,a}}` | `{"type":"float","value"}` | `{"type":"string","value"}` | `{"type":"boolean","value"}` | `{"type":"alias","variable_id"}`.
 - Mode names are still synthetic (schema v1 does not persist them). Alias values must be rendered as references, not resolved colours.
 - `hotspots` is empty unless `prototype.active`; it lists visible nodes with interactions inside the presented frame (current frame first; open overlays' hotspots are not yet included — documented limitation).
+
+## 14. AI assistance and plugins (v1.6 addendum, session 15)
+
+Additive snapshot fields:
+
+```json
+{
+  "ai_preview": {
+    "source": "offline",
+    "summary": ["Frame “Login”", "Rectangle “Button” in “Login”"],
+    "warnings": [],
+    "requires_confirmation": false,
+    "steps": 7
+  },
+  "plugins": [{
+    "id": "hello-icon-crafter", "name": "Hello Icon Crafter", "version": "1.0.0",
+    "description": "…", "enabled": true, "state": "enabled",
+    "last_error": null, "settings": {"greeting": "Hello from a plugin"},
+    "manifest": { /* full validated manifest */ }
+  }]
+}
+```
+
+AI commands (all return the canonical snapshot except text-only tasks, which still
+return it with the result in `status`):
+
+| command | args | behaviour |
+|---|---|---|
+| `ai_generate_layout` | `{prompt, width?, height?}` (defaults 1440×900) | builds a validated proposal against a clone; stores it; snapshot returns `ai_preview`; **never applies automatically** |
+| `ai_apply_last` | `{confirmed?: boolean}` | applies all steps as ordinary undoable transactions; destructive proposals (deletes) require `confirmed: true` |
+| `ai_discard_last` | `{}` | clears the pending proposal |
+| `ai_rename_layers` | `{}` | provider suggests names for the selection (or up to 100 page layers); applies accepted renames as undoable patches |
+| `ai_text_task` | `{task, input}` where task ∈ improve \| explain \| content \| style \| comments | prose only; result goes to `status` (no document change) |
+
+Provider configuration: the built-in offline provider needs nothing. A remote
+OpenAI-compatible provider is compiled only with the `http` cargo feature and
+reads `ICONCRAFTER_AI_ENDPOINT`, `ICONCRAFTER_AI_MODEL` (default `gpt-4o-mini`)
+and `ICONCRAFTER_AI_KEY` from the environment at call time; keys are never
+stored in the document, preferences or logs. Without the feature or env vars the
+engine transparently falls back to offline mode (`ai_preview.source == "offline"`).
+
+Plugin commands (snapshot `plugins` reflects the registry):
+
+| command | args |
+|---|---|
+| `plugin_install` | `{manifest: object \| string}` |
+| `plugin_install_example` | `{}` (bundles `hello-icon-crafter`) |
+| `plugin_remove` | `{plugin_id: string}` |
+| `plugin_set_enabled` | `{plugin_id: string, enabled: boolean}` |
+| `plugin_set_setting` | `{plugin_id: string, key: string, value: JSON}` — validated against the manifest's typed setting |
+
+Honest limits: plugin execution is **op-scoped and host-provided** — manifests,
+permissions, grants, registries, isolated execution and typed settings are
+implemented and tested, but there is no third-party JavaScript/WASM runtime yet,
+so arbitrary plugins cannot execute code; the UI manager panel arrives with the
+frontend milestone 5. AI prose quality depends on the selected provider; the
+offline provider returns deterministic structured layouts and honest
+"offline analysis" prose, not simulated model output.

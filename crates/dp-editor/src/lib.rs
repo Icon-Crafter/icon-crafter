@@ -16,6 +16,7 @@
 //! The UI layer only draws pixels and overlays and sends user intent; it never
 //! mutates the document itself.
 
+pub mod assist;
 pub mod commands;
 pub mod input;
 pub mod overlay;
@@ -320,6 +321,10 @@ pub struct EditorState {
     pub dev_mode: bool,
     /// Developer handoff state (annotations and readiness).
     pub handoff: dp_devmode::Handoff,
+    /// Latest AI proposal awaiting explicit apply/discard (never auto-applied).
+    pub last_ai_proposal: Option<dp_ai::Proposal>,
+    /// Installed plugins (op-scoped sandbox; no arbitrary-code runtime yet).
+    pub plugins: dp_plugins::PluginRegistry,
     /// Active prototype presentation session.
     pub playback: Option<playback::PrototypePlayback>,
     /// Pointer-down position while presenting (CSS pixels).
@@ -363,6 +368,8 @@ impl EditorState {
             hit_index: None,
             dev_mode: false,
             handoff: dp_devmode::Handoff::new(0),
+            last_ai_proposal: None,
+            plugins: dp_plugins::PluginRegistry::new(),
             playback: None,
             proto_pointer_down: None,
             drag: None,

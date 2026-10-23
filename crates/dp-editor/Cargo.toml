@@ -16,6 +16,8 @@ dp-io = { path = "../dp-io" }
 dp-persist = { path = "../dp-persist" }
 dp-prototype = { path = "../dp-prototype" }
 dp-devmode = { path = "../dp-devmode" }
+dp-ai = { path = "../dp-ai" }
+dp-plugins = { path = "../dp-plugins" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

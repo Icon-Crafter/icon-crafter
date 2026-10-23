@@ -1,4 +1,4 @@
-# Testing & benchmarks
+﻿# Testing & benchmarks
 
 ## Layers
 
@@ -235,7 +235,7 @@ Manual/native: run `pnpm --dir apps/ui dev --port 1420` then `cargo build -p ico
 
 ```powershell
 cd "C:\Users\w4ua\Documents\Icon Crafter"
-cargo test -p dp-geom -p dp-model -p dp-text -p dp-layout -p dp-render -p dp-io -p dp-persist -p dp-editor -p dp-collab -p dp-prototype -p dp-devmode -p dp-ai -p dp-plugins --no-default-features   # 332 passed
+cargo test -p dp-geom -p dp-model -p dp-text -p dp-layout -p dp-render -p dp-io -p dp-persist -p dp-editor -p dp-collab -p dp-prototype -p dp-devmode -p dp-ai -p dp-plugins --no-default-features   # 266 passed
 cargo test -p iconcrafter-server --offline --lib   # 132 passed
 cargo run -p dp-editor --example bench_editor      # see docs/PERFORMANCE.md
 ```
@@ -267,3 +267,28 @@ Start-Process target\release\iconcrafter-desktop.exe
 Expected: window URL `http://tauri.localhost/` (embedded assets), status bar shows `TAURI IPC` and `rev N`, no dependency on the dev server. Verified IPC script (recorded in DEVELOPMENT-LOG session 13): create shape, save `.icraft`, export PNG/SVG/PDF, reopen file, all with zero errors.
 
 Production builds MUST use `--features custom-protocol`; without it Tauri compiles the binary in dev mode and tries to load the Vite dev URL (this was a real bug caught in session 13).
+
+## Session 15 verification — plugins + AI (expected counts)
+
+```powershell
+cargo test -p dp-ai --no-default-features        # 19 passed
+cargo test -p dp-plugins                         # 23 passed
+cargo test -p dp-editor --no-default-features    # 40 passed (lib 6, contract_additions 2, editor 23, ai_plugins 6, prototype_authoring 3)
+cargo clippy -p dp-ai -p dp-plugins -p dp-editor --no-default-features --all-targets -- -D warnings
+cargo check -p iconcrafter-desktop               # EXIT 0
+```
+
+Full engine total in the last run: 320 tests across 13 crates (geom 44, model
+72, text 13, layout 12, render 20, io 9, persist 13, editor 40, collab 23,
+prototype 18, devmode 14, ai 19, plugins 23) + backend 132 unit tests.
+
+Optional remote AI smoke test (never committed as a key): set
+`ICONCRAFTER_AI_ENDPOINT`, `ICONCRAFTER_AI_MODEL` and `ICONCRAFTER_AI_KEY`, then
+run a build with `--features http` and call `ai_generate_layout` with a real
+prompt; without the variables the same call must fall back to
+`ai_preview.source == "offline"`.
+
+UI checks for milestone 5 (frontend): AI assistant panel (prompt, proposal
+summary, warnings, apply/confirm/discard), plugin manager (install example,
+enable/disable, remove, typed settings, permissions display), capability gating
+from `bootstrap.capabilities.ai/plugins`.

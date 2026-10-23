@@ -1787,12 +1787,14 @@ dependencies = [
 name = "dp-editor"
 version = "0.1.0"
 dependencies = [
+ "dp-ai",
  "dp-devmode",
  "dp-geom",
  "dp-io",
  "dp-layout",
  "dp-model",
  "dp-persist",
+ "dp-plugins",
  "dp-prototype",
  "dp-render",
  "dp-text",
