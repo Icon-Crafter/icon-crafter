@@ -334,7 +334,8 @@ impl CollabSession {
                 server_seq,
             } => {
                 let before = self.inflight.len();
-                self.inflight.retain(|envelope| envelope.batch_id != batch_id);
+                self.inflight
+                    .retain(|envelope| envelope.batch_id != batch_id);
                 if self.inflight.len() != before {
                     self.server_seq = self.server_seq.max(server_seq);
                     self.needs_resync = None;
@@ -349,7 +350,8 @@ impl CollabSession {
                 code,
                 message,
             } => {
-                self.inflight.retain(|envelope| envelope.batch_id != batch_id);
+                self.inflight
+                    .retain(|envelope| envelope.batch_id != batch_id);
                 report.events.push(SessionEvent::Rejected {
                     batch_id,
                     code,
@@ -378,7 +380,8 @@ impl CollabSession {
 
     /// Builds a sync request for the missing sequence.
     pub fn sync_request(&self) -> Option<ClientMessage> {
-        self.needs_resync.map(|from| ClientMessage::SyncRequest { from })
+        self.needs_resync
+            .map(|from| ClientMessage::SyncRequest { from })
     }
 
     /// Publishes presence.
@@ -515,10 +518,13 @@ mod tests {
             .receive(relay(remote, 2, remote_batch.clone()))
             .expect("gap");
         assert_eq!(session.resync_from(), Some(1));
-        assert!(report
-            .events
-            .iter()
-            .any(|event| matches!(event, SessionEvent::ResyncRequired { expected: 1, got: 2 })));
+        assert!(report.events.iter().any(|event| matches!(
+            event,
+            SessionEvent::ResyncRequired {
+                expected: 1,
+                got: 2
+            }
+        )));
         assert_eq!(
             session.sync_request(),
             Some(ClientMessage::SyncRequest { from: 1 })

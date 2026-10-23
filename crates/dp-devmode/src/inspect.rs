@@ -433,10 +433,7 @@ fn paint_info(
         style_refs.push(style_id.to_string());
     }
     let mut resolved = serde_json::to_value(paint).unwrap_or(serde_json::Value::Null);
-    let kind = resolved["type"]
-        .as_str()
-        .unwrap_or("unknown")
-        .to_owned();
+    let kind = resolved["type"].as_str().unwrap_or("unknown").to_owned();
     if let Some(variable_id) = variable_id {
         variable_refs.push(variable_id.to_string());
         if let Some(color) = document.variables.resolve_color(variable_id, mode) {
@@ -501,18 +498,22 @@ fn paint_info(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn effect_info(document: &Document, mode: dp_model::ModeId, effect: &dp_model::Effect) -> EffectInfo {
+fn effect_info(
+    document: &Document,
+    mode: dp_model::ModeId,
+    effect: &dp_model::Effect,
+) -> EffectInfo {
     let _ = (document, mode);
     let value = serde_json::to_value(effect).unwrap_or(serde_json::Value::Null);
-    let kind = value["type"]
-        .as_str()
-        .unwrap_or("unknown")
-        .to_owned();
+    let kind = value["type"].as_str().unwrap_or("unknown").to_owned();
     let color = serde_json::from_value::<Color>(value["color"].clone()).ok();
-    let offset = value["offset"].as_object().and_then(|offset| {
-        Some([offset.get("x")?.as_f64()?, offset.get("y")?.as_f64()?])
-    });
-    let blur = value["blur"].as_f64().or_else(|| value["radius"].as_f64()).unwrap_or(0.0);
+    let offset = value["offset"]
+        .as_object()
+        .and_then(|offset| Some([offset.get("x")?.as_f64()?, offset.get("y")?.as_f64()?]));
+    let blur = value["blur"]
+        .as_f64()
+        .or_else(|| value["radius"].as_f64())
+        .unwrap_or(0.0);
     let spread = value["spread"].as_f64().unwrap_or(0.0);
     let blend = value["blend"].as_str().map(str::to_owned);
     EffectInfo {
@@ -527,7 +528,10 @@ fn effect_info(document: &Document, mode: dp_model::ModeId, effect: &dp_model::E
 
 fn text_info(content: &dp_model::TextContent, fallback_fills: &[dp_model::Fill]) -> TextInfo {
     let style = &content.style;
-    let line_height = style.line_height.resolve(style.font_size).unwrap_or(style.font_size * 1.2);
+    let line_height = style
+        .line_height
+        .resolve(style.font_size)
+        .unwrap_or(style.font_size * 1.2);
     let color = style
         .fills
         .iter()
@@ -629,14 +633,22 @@ mod tests {
     fn inspects_text_typography_and_world_bounds() {
         let document = document();
         let layout = layout(&document);
-        let text_id = document.pages[0].nodes.values().find(|node| node.name == "Title").unwrap().id;
+        let text_id = document.pages[0]
+            .nodes
+            .values()
+            .find(|node| node.name == "Title")
+            .unwrap()
+            .id;
         let snapshot = inspect(&document, &layout, &[text_id]);
         let node = &snapshot.nodes[0];
         let text = node.text.as_ref().expect("text info");
         assert_eq!(text.characters, "Hello");
         assert_eq!(text.font_size, 24.0);
         assert_eq!(text.font_weight, 600);
-        assert_eq!(text.color.map(|color| color.to_hex()).as_deref(), Some("#ffffff"));
+        assert_eq!(
+            text.color.map(|color| color.to_hex()).as_deref(),
+            Some("#ffffff")
+        );
         // world position is inside the card
         assert!(node.bounds[0] >= 20.0);
     }

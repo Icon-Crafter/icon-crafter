@@ -524,8 +524,8 @@ impl EditorState {
                     .node(node_id)
                     .cloned()
                     .unwrap_or_else(|| Node::rectangle("Rectangle", 0.0, 0.0, 1.0, 1.0));
-                let too_small = final_node.transform.w.abs() < 2.0
-                    && final_node.transform.h.abs() < 2.0;
+                let too_small =
+                    final_node.transform.w.abs() < 2.0 && final_node.transform.h.abs() < 2.0;
                 if !moved || too_small {
                     // Clicking with a shape tool creates a Figma-style default
                     // layer instead of a degenerate zero-size node.
@@ -774,7 +774,12 @@ impl EditorState {
                 found.push(id);
             }
         }
-        found.sort_by_key(|id| order.iter().position(|candidate| candidate == id).unwrap_or(usize::MAX));
+        found.sort_by_key(|id| {
+            order
+                .iter()
+                .position(|candidate| candidate == id)
+                .unwrap_or(usize::MAX)
+        });
         found
     }
 

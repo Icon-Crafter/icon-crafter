@@ -16,20 +16,18 @@ use dp_geom::{Mat2D, Point, Rect};
 use indexmap::IndexMap;
 use uuid::Uuid;
 
-use crate::document::{
-    ComponentMeta, ComponentRegistry, Document, DocumentSettings,
-};
+use crate::ModelError;
+use crate::document::{ComponentMeta, ComponentRegistry, Document, DocumentSettings};
 use crate::geometry::TextStyle;
 use crate::ids::{ComponentId, NodeId, PageId, StyleId, VariableId};
 use crate::node::{ComponentRole, Node, NodeKind, Transform};
 use crate::page::Page;
 use crate::paint::{Effect, Fill, Paint, StrokeAlign};
-use crate::style::{
-    SharedEffectStyle, SharedPaintStyle, SharedTextStyle, StyleRegistry,
-};
+use crate::style::{SharedEffectStyle, SharedPaintStyle, SharedTextStyle, StyleRegistry};
 use crate::transactions::{Edit, Transaction};
-use crate::variables::{Variable, VariableCollection, VariableRegistry, VariableType, VariableValue};
-use crate::ModelError;
+use crate::variables::{
+    Variable, VariableCollection, VariableRegistry, VariableType, VariableValue,
+};
 
 /// Returns selected ids without descendants of other selected ids, in input order.
 fn top_level_ids(page: &Page, ids: &[NodeId]) -> Vec<NodeId> {
@@ -139,23 +137,20 @@ pub fn create_component(
     }
     let bounds = bounds.expect("selection is not empty");
     let parent_world = match parent {
-        Some(parent_id) => world_matrix(page, parent_id).ok_or(ModelError::NodeNotFound(parent_id))?,
+        Some(parent_id) => {
+            world_matrix(page, parent_id).ok_or(ModelError::NodeNotFound(parent_id))?
+        }
         None => Mat2D::IDENTITY,
     };
-    let inverse_parent = parent_world
-        .inverse()
-        .ok_or_else(|| ModelError::InvalidDocument("parent transform is not invertible".to_owned()))?;
+    let inverse_parent = parent_world.inverse().ok_or_else(|| {
+        ModelError::InvalidDocument("parent transform is not invertible".to_owned())
+    })?;
     let origin = inverse_parent.apply_point(Point::new(bounds.x, bounds.y));
 
     let mut component = Node::new(
         NodeKind::Component,
         name.to_owned(),
-        Transform::new(
-            origin.x,
-            origin.y,
-            bounds.w.max(0.01),
-            bounds.h.max(0.01),
-        ),
+        Transform::new(origin.x, origin.y, bounds.w.max(0.01), bounds.h.max(0.01)),
     );
     // Masters start compact; contents render from their children.
     component.children = Vec::new();
@@ -174,10 +169,7 @@ pub fn create_component(
         index: insert_index,
     });
     for (position, id) in roots.iter().enumerate() {
-        let node = page
-            .nodes
-            .get(id)
-            .ok_or(ModelError::NodeNotFound(*id))?;
+        let node = page.nodes.get(id).ok_or(ModelError::NodeNotFound(*id))?;
         let child_world = world_matrix(page, *id).ok_or(ModelError::NodeNotFound(*id))?;
         let local = inverse_component.mul(child_world);
         let mut after = node.clone();
@@ -307,11 +299,7 @@ pub fn create_instance(
 }
 
 /// Creates a shared paint style.
-pub fn create_paint_style(
-    document: &Document,
-    name: &str,
-    paint: Paint,
-) -> Transaction {
+pub fn create_paint_style(document: &Document, name: &str, paint: Paint) -> Transaction {
     let mut styles = document.styles.clone();
     styles.upsert_paint(SharedPaintStyle {
         id: StyleId::new_v4(),
@@ -325,11 +313,7 @@ pub fn create_paint_style(
 }
 
 /// Creates a shared text style.
-pub fn create_text_style(
-    document: &Document,
-    name: &str,
-    style: TextStyle,
-) -> Transaction {
+pub fn create_text_style(document: &Document, name: &str, style: TextStyle) -> Transaction {
     let mut styles = document.styles.clone();
     styles.upsert_text(SharedTextStyle {
         id: StyleId::new_v4(),
@@ -343,11 +327,7 @@ pub fn create_text_style(
 }
 
 /// Creates a shared effect style.
-pub fn create_effect_style(
-    document: &Document,
-    name: &str,
-    effects: Vec<Effect>,
-) -> Transaction {
+pub fn create_effect_style(document: &Document, name: &str, effects: Vec<Effect>) -> Transaction {
     let mut styles = document.styles.clone();
     styles.upsert_effect(SharedEffectStyle {
         id: StyleId::new_v4(),
@@ -462,10 +442,7 @@ pub fn rename_style(
 }
 
 /// Removes a shared style (references stay in the document and validate as broken).
-pub fn delete_style(
-    document: &Document,
-    style_id: StyleId,
-) -> Result<Transaction, ModelError> {
+pub fn delete_style(document: &Document, style_id: StyleId) -> Result<Transaction, ModelError> {
     let mut styles = document.styles.clone();
     let removed = styles.paints.shift_remove(&style_id).is_some()
         || styles.texts.shift_remove(&style_id).is_some()
@@ -498,7 +475,11 @@ fn ensure_collection(
 }
 
 fn ensure_variable_name_free(registry: &VariableRegistry, name: &str) -> Result<(), ModelError> {
-    if registry.variables.values().any(|variable| variable.name == name) {
+    if registry
+        .variables
+        .values()
+        .any(|variable| variable.name == name)
+    {
         return Err(ModelError::InvalidDocument(format!(
             "a variable named {name} already exists"
         )));
@@ -537,12 +518,7 @@ pub fn create_color_variable(
 ) -> Result<Transaction, ModelError> {
     let (collection, mut registry) = ensure_collection(document, collection_name)?;
     ensure_variable_name_free(&registry, variable_name)?;
-    let variable = Variable::color(
-        collection.id,
-        variable_name,
-        collection.default_mode,
-        color,
-    );
+    let variable = Variable::color(collection.id, variable_name, collection.default_mode, color);
     let variable_id = variable.id;
     registry.variables.insert(variable_id, variable);
     let mut transaction = Transaction::new("Create colour variable");
@@ -584,10 +560,9 @@ pub fn set_variable_value(
     value: VariableValue,
 ) -> Result<Transaction, ModelError> {
     let mut registry = document.variables.clone();
-    let variable = registry
-        .variables
-        .get(&variable_id)
-        .ok_or_else(|| ModelError::InvalidDocument(format!("variable {variable_id} does not exist")))?;
+    let variable = registry.variables.get(&variable_id).ok_or_else(|| {
+        ModelError::InvalidDocument(format!("variable {variable_id} does not exist"))
+    })?;
     let collection = registry
         .collections
         .iter()
@@ -623,7 +598,9 @@ pub fn set_active_mode(
         .iter()
         .find(|collection| collection.id == collection_id)
         .ok_or_else(|| {
-            ModelError::InvalidDocument(format!("variable collection {collection_id} does not exist"))
+            ModelError::InvalidDocument(format!(
+                "variable collection {collection_id} does not exist"
+            ))
         })?;
     if !collection.has_mode(mode_id) {
         return Err(ModelError::InvalidDocument(format!(
@@ -700,7 +677,16 @@ mod tests {
         assert_eq!(component.children.len(), 2);
         assert_eq!(component.transform.w, 180.0);
         assert_eq!(document.components.len(), 1);
-        assert_eq!(document.components.components.values().next().unwrap().node_id, component_id);
+        assert_eq!(
+            document
+                .components
+                .components
+                .values()
+                .next()
+                .unwrap()
+                .node_id,
+            component_id
+        );
         history.undo(&mut document).expect("undo works");
         let page = document.page(page_id).expect("page");
         assert_eq!(page.nodes.get(&component_id), None);
@@ -715,7 +701,13 @@ mod tests {
         let create = create_component(&document, page_id, &ids, "Card").unwrap();
         let master_id = create.selection_after[0];
         apply(&mut document, &mut history, create);
-        let component_id = document.components.components.keys().copied().next().unwrap();
+        let component_id = document
+            .components
+            .components
+            .keys()
+            .copied()
+            .next()
+            .unwrap();
         let place = create_instance(&document, page_id, component_id, None, 300.0, 40.0).unwrap();
         let instance_id = place.selection_after[0];
         apply(&mut document, &mut history, place);
@@ -725,7 +717,10 @@ mod tests {
             instance.component,
             Some(ComponentRole::Instance { component_id: linked, .. }) if linked == component_id
         ));
-        assert_eq!(instance.transform.w, document.node(master_id).unwrap().transform.w);
+        assert_eq!(
+            instance.transform.w,
+            document.node(master_id).unwrap().transform.w
+        );
         let detach = detach_instance(&document, page_id, instance_id).unwrap();
         apply(&mut document, &mut history, detach);
         let detached = document.node(instance_id).expect("detached");
@@ -780,7 +775,10 @@ mod tests {
         assert_eq!(node.text.as_ref().unwrap().style.font_size, 14.0);
         let rename = rename_style(&document, style_id, "Typography/Body Large").unwrap();
         apply(&mut document, &mut history, rename);
-        assert_eq!(document.styles.texts[&style_id].name, "Typography/Body Large");
+        assert_eq!(
+            document.styles.texts[&style_id].name,
+            "Typography/Body Large"
+        );
         let delete = delete_style(&document, style_id).unwrap();
         apply(&mut document, &mut history, delete);
         assert!(document.styles.texts.is_empty());
@@ -802,7 +800,11 @@ mod tests {
         let variable_id = *document.variables.variables.keys().next().unwrap();
         let light = collection.default_mode;
         assert_eq!(
-            document.variables.resolve_color(variable_id, light).unwrap().to_hex(),
+            document
+                .variables
+                .resolve_color(variable_id, light)
+                .unwrap()
+                .to_hex(),
             "#0b0d11"
         );
         let set_value = set_variable_value(
@@ -816,12 +818,19 @@ mod tests {
         .unwrap();
         apply(&mut document, &mut history, set_value);
         assert_eq!(
-            document.variables.resolve_color(variable_id, light).unwrap().to_hex(),
+            document
+                .variables
+                .resolve_color(variable_id, light)
+                .unwrap()
+                .to_hex(),
             "#ffffff"
         );
         let mode = set_active_mode(&document, collection.id, light).unwrap();
         apply(&mut document, &mut history, mode);
-        assert_eq!(document.settings.active_modes.get(&collection.id), Some(&light));
+        assert_eq!(
+            document.settings.active_modes.get(&collection.id),
+            Some(&light)
+        );
         history.undo(&mut document).expect("undo mode");
         assert!(document.settings.active_modes.is_empty());
         let nested = create_variable_collection(&document, "Theme").unwrap_err();
@@ -843,10 +852,7 @@ mod tests {
                 .unwrap(),
             8.0
         );
-        assert_eq!(
-            design_system_counts(&document),
-            (0, 0, 1)
-        );
+        assert_eq!(design_system_counts(&document), (0, 0, 1));
     }
 
     #[test]

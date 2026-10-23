@@ -103,12 +103,7 @@ impl<T: Clone + PartialEq> RgaList<T> {
     ///
     /// Concurrent inserts after the same anchor are ordered by `id`, which makes
     /// the result deterministic on every replica.
-    pub fn insert_after(
-        &mut self,
-        after: Option<&T>,
-        value: T,
-        id: Hlc,
-    ) -> Result<(), RgaError> {
+    pub fn insert_after(&mut self, after: Option<&T>, value: T, id: Hlc) -> Result<(), RgaError> {
         if self.entries.iter().any(|entry| entry.value == value) {
             return Err(RgaError::Duplicate);
         }

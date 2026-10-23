@@ -384,7 +384,11 @@ impl Replica {
         stamp: Hlc,
     ) -> Result<ApplyReport, OpError> {
         let state = self.page_mut(page)?;
-        if state.inserted.get(&node.id).is_some_and(|existing| *existing >= stamp) {
+        if state
+            .inserted
+            .get(&node.id)
+            .is_some_and(|existing| *existing >= stamp)
+        {
             return Ok(ApplyReport::stale(Some(Conflict {
                 message: format!("node {} was already inserted", node.id),
                 node: Some(node.id),
@@ -392,15 +396,18 @@ impl Replica {
             })));
         }
         if let Some(parent_id) = parent
-            && !state.nodes.contains_key(&parent_id) {
-                return Err(OpError::UnknownNode(parent_id));
-            }
+            && !state.nodes.contains_key(&parent_id)
+        {
+            return Err(OpError::UnknownNode(parent_id));
+        }
         let mut stored = node.clone();
         stored.parent = parent;
         stored.children.clear();
         state.nodes.insert(node.id, stored);
         state.inserted.insert(node.id, stamp);
-        state.locations.insert(node.id, Register::new(parent, stamp));
+        state
+            .locations
+            .insert(node.id, Register::new(parent, stamp));
         for field in NodeField::ALL {
             let entry = state.field_stamps.entry((node.id, field)).or_insert(stamp);
             if *entry < stamp {
@@ -421,7 +428,11 @@ impl Replica {
         stamp: Hlc,
     ) -> Result<ApplyReport, OpError> {
         let state = self.page_mut(page)?;
-        if state.deleted.get(&node).is_some_and(|delete| *delete >= stamp) {
+        if state
+            .deleted
+            .get(&node)
+            .is_some_and(|delete| *delete >= stamp)
+        {
             return Ok(ApplyReport::stale(Some(Conflict {
                 message: format!("node {node} was already deleted by a newer op"),
                 node: Some(node),
@@ -453,12 +464,18 @@ impl Replica {
             .is_some_and(|existing| *existing >= stamp)
         {
             return Ok(ApplyReport::stale(Some(Conflict {
-                message: format!("{} on {node} superseded by a newer write", field_name(field)),
+                message: format!(
+                    "{} on {node} superseded by a newer write",
+                    field_name(field)
+                ),
                 node: Some(node),
                 field: Some(field),
             })));
         }
-        let node_ref = state.nodes.get_mut(&node).ok_or(OpError::UnknownNode(node))?;
+        let node_ref = state
+            .nodes
+            .get_mut(&node)
+            .ok_or(OpError::UnknownNode(node))?;
         field.apply(node_ref, value.clone())?;
         state.field_stamps.insert((node, field), stamp);
         Ok(ApplyReport::changed())
@@ -589,7 +606,11 @@ impl Replica {
                 "replica has no pages after materialization".to_owned(),
             ));
         }
-        if !document.pages.iter().any(|page| page.id == document.active_page) {
+        if !document
+            .pages
+            .iter()
+            .any(|page| page.id == document.active_page)
+        {
             document.active_page = document.pages[0].id;
         }
         Ok(document)
@@ -646,10 +667,7 @@ fn seed_subtree(
             .and_then(|list| list.values().last().cloned());
         {
             let list = state.order.entry(parent).or_default();
-            if list
-                .insert_after(previous.as_ref(), *child, stamp)
-                .is_err()
-            {
+            if list.insert_after(previous.as_ref(), *child, stamp).is_err() {
                 tracing::warn!(node = %child, "seed order insert rejected duplicate id");
             }
         }
@@ -682,7 +700,9 @@ mod tests {
     fn document() -> Document {
         let mut document = Document::new("Collaborative File");
         let page_id = document.active_page_id();
-        let page = document.page_mut(page_id).expect("new document has an active page");
+        let page = document
+            .page_mut(page_id)
+            .expect("new document has an active page");
         let frame = Node::frame("Frame", 0.0, 0.0, 400.0, 300.0);
         let frame_id = frame.id;
         page.insert_node(frame, None, None).unwrap();
@@ -723,10 +743,20 @@ mod tests {
         let mut b = Replica::seed(&document, actor(2));
 
         let op_a = a
-            .local_set(page, node, NodeField::Name, serde_json::json!("Renamed by A"))
+            .local_set(
+                page,
+                node,
+                NodeField::Name,
+                serde_json::json!("Renamed by A"),
+            )
             .unwrap();
         let op_b = b
-            .local_set(page, node, NodeField::Name, serde_json::json!("Renamed by B"))
+            .local_set(
+                page,
+                node,
+                NodeField::Name,
+                serde_json::json!("Renamed by B"),
+            )
             .unwrap();
 
         a.apply(&op_b).unwrap();
@@ -798,7 +828,10 @@ mod tests {
         let report = a.apply(&first).unwrap();
         assert!(!report.changed);
         assert!(report.stale);
-        assert_eq!(a.to_document().unwrap().pages[0].nodes[&frame].opacity, 0.75);
+        assert_eq!(
+            a.to_document().unwrap().pages[0].nodes[&frame].opacity,
+            0.75
+        );
     }
 
     #[test]

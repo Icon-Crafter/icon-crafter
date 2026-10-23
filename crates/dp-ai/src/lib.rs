@@ -27,15 +27,13 @@ pub mod prompts;
 pub mod proposals;
 pub mod provider;
 
-pub use proposals::{
-    apply, propose, AiError, IntentOp, Proposal, MAX_DIMENSION, MAX_INTENTS,
-};
 pub use prompts::{
-    comments_prompt, content_prompt, explain_prompt, layout_prompt, rename_prompt, review_prompt,
-    style_prompt, INTENT_SCHEMA, SYSTEM_ASSISTANT, SYSTEM_LAYOUT,
+    INTENT_SCHEMA, SYSTEM_ASSISTANT, SYSTEM_LAYOUT, comments_prompt, content_prompt,
+    explain_prompt, layout_prompt, rename_prompt, review_prompt, style_prompt,
 };
+pub use proposals::{AiError, IntentOp, MAX_DIMENSION, MAX_INTENTS, Proposal, apply, propose};
 pub use provider::{
-    provider_from_env, AiProvider, Completion, CompletionRequest, OfflineProvider, ProviderError,
+    AiProvider, Completion, CompletionRequest, OfflineProvider, ProviderError, provider_from_env,
 };
 
 #[cfg(feature = "http")]
@@ -154,8 +152,8 @@ impl AiEngine {
         if text.trim().is_empty() {
             return Ok(Vec::new());
         }
-        let mapping: std::collections::BTreeMap<String, String> =
-            serde_json::from_str(&text).map_err(|error| AiError::InvalidResponse(error.to_string()))?;
+        let mapping: std::collections::BTreeMap<String, String> = serde_json::from_str(&text)
+            .map_err(|error| AiError::InvalidResponse(error.to_string()))?;
         Ok(mapping.into_iter().collect())
     }
 
@@ -249,7 +247,9 @@ mod tests {
 
         let mut document = document;
         let mut history = History::new();
-        engine.apply(&mut document, &mut history, &proposal, false).unwrap();
+        engine
+            .apply(&mut document, &mut history, &proposal, false)
+            .unwrap();
         assert!(document.active_page().nodes.len() >= 3);
     }
 

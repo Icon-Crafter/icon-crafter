@@ -72,10 +72,7 @@ impl Hlc {
 
     /// The zero stamp for an actor (used for seeding local state).
     pub fn zero(actor: ActorId) -> Self {
-        Self {
-            lamport: 0,
-            actor,
-        }
+        Self { lamport: 0, actor }
     }
 }
 

@@ -26,20 +26,18 @@ pub mod registry;
 pub mod sandbox;
 
 pub use executor::{
-    dispatch_event, run_command, ExecutionReport, HandlerCall, PluginErrorRecord, PluginHandler,
-    MAX_REQUESTS_PER_CALL,
+    ExecutionReport, HandlerCall, MAX_REQUESTS_PER_CALL, PluginErrorRecord, PluginHandler,
+    dispatch_event, run_command,
 };
 pub use manifest::{
-    ManifestError, PluginCommand, PluginEvent, PluginManifest, PluginPanel, PluginSetting,
-    MANIFEST_VERSION, MAX_COMMANDS, MAX_PANELS, MAX_SETTINGS,
+    MANIFEST_VERSION, MAX_COMMANDS, MAX_PANELS, MAX_SETTINGS, ManifestError, PluginCommand,
+    PluginEvent, PluginManifest, PluginPanel, PluginSetting,
 };
-pub use permissions::{Grants, Permission, API_VERSION as PLUGIN_API_VERSION};
-pub use registry::{
-    PluginRegistry, PluginState, RegisteredPlugin, RegistryError, MAX_PLUGINS,
-};
+pub use permissions::{API_VERSION as PLUGIN_API_VERSION, Grants, Permission};
+pub use registry::{MAX_PLUGINS, PluginRegistry, PluginState, RegisteredPlugin, RegistryError};
 pub use sandbox::{
-    execute, validate_setting_value, SandboxContext, SandboxError, SandboxProposal, SandboxRequest,
-    SandboxResponse, MAX_NODES_PER_PROPOSAL, MAX_NODES_PER_REQUEST, MAX_STRING_BYTES,
+    MAX_NODES_PER_PROPOSAL, MAX_NODES_PER_REQUEST, MAX_STRING_BYTES, SandboxContext, SandboxError,
+    SandboxProposal, SandboxRequest, SandboxResponse, execute, validate_setting_value,
 };
 
 /// Version of the plugin host API surface.

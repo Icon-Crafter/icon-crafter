@@ -51,10 +51,11 @@ impl RegisteredPlugin {
 
     /// A settings value, falling back to the manifest default.
     pub fn setting(&self, key: &str) -> Option<Value> {
-        self.settings
-            .get(key)
-            .cloned()
-            .or_else(|| self.manifest.setting(key).map(|setting| setting.default_value()))
+        self.settings.get(key).cloned().or_else(|| {
+            self.manifest
+                .setting(key)
+                .map(|setting| setting.default_value())
+        })
     }
 }
 
@@ -271,7 +272,11 @@ mod tests {
         assert_eq!(id, "plugin-a");
         assert_eq!(registry.len(), 1);
         assert!(!registry.get("plugin-a").unwrap().is_enabled());
-        assert!(registry.subscribers(crate::manifest::PluginEvent::DocumentChanged).is_empty());
+        assert!(
+            registry
+                .subscribers(crate::manifest::PluginEvent::DocumentChanged)
+                .is_empty()
+        );
         registry.enable("plugin-a").unwrap();
         assert!(registry.get("plugin-a").unwrap().is_enabled());
         assert_eq!(
@@ -331,6 +336,9 @@ mod tests {
         registry.mark_error("plugin-a", "boom");
         assert!(!registry.get("plugin-a").unwrap().is_enabled());
         assert!(registry.get("plugin-b").unwrap().is_enabled());
-        assert_eq!(registry.get("plugin-a").unwrap().last_error.as_deref(), Some("boom"));
+        assert_eq!(
+            registry.get("plugin-a").unwrap().last_error.as_deref(),
+            Some("boom")
+        );
     }
 }

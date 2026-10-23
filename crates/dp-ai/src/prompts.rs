@@ -79,7 +79,14 @@ mod tests {
 
     #[test]
     fn schema_mentions_every_intent() {
-        for op in ["add_frame", "add_rectangle", "add_text", "set_fill", "rename_layer", "delete_node"] {
+        for op in [
+            "add_frame",
+            "add_rectangle",
+            "add_text",
+            "set_fill",
+            "rename_layer",
+            "delete_node",
+        ] {
             assert!(INTENT_SCHEMA.contains(op), "schema misses {op}");
         }
     }

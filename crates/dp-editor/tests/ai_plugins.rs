@@ -49,7 +49,10 @@ fn ai_discard_removes_preview() {
     state.ai_generate_layout("dashboard", 1440, 900).unwrap();
     assert!(state.snapshot().ai_preview.is_some());
     let outcome = state.command("ai_discard_last", &Value::Null);
-    assert!(matches!(outcome, dp_editor::commands::CommandOutcome::Ok { .. }));
+    assert!(matches!(
+        outcome,
+        dp_editor::commands::CommandOutcome::Ok { .. }
+    ));
     assert!(state.snapshot().ai_preview.is_none());
     assert!(state.page().nodes.is_empty());
 }
@@ -61,7 +64,10 @@ fn ai_text_task_reports_honest_offline_output() {
         "ai_text_task",
         &serde_json::json!({"task": "improve", "input": "frame Login"}),
     );
-    assert!(matches!(outcome, dp_editor::commands::CommandOutcome::Ok { .. }));
+    assert!(matches!(
+        outcome,
+        dp_editor::commands::CommandOutcome::Ok { .. }
+    ));
     assert!(state.status.contains("Offline analysis"));
     let outcome = state.command(
         "ai_text_task",
@@ -77,7 +83,10 @@ fn ai_text_task_reports_honest_offline_output() {
 fn plugins_install_toggle_and_remove_through_commands() {
     let mut state = editor();
     let outcome = state.command("plugin_install_example", &Value::Null);
-    assert!(matches!(outcome, dp_editor::commands::CommandOutcome::Ok { .. }));
+    assert!(matches!(
+        outcome,
+        dp_editor::commands::CommandOutcome::Ok { .. }
+    ));
     let plugins = state.snapshot().plugins;
     assert_eq!(plugins.len(), 1);
     let plugin = plugins[0].clone();
@@ -89,14 +98,20 @@ fn plugins_install_toggle_and_remove_through_commands() {
         "plugin_set_enabled",
         &serde_json::json!({"plugin_id": plugin.id, "enabled": true}),
     );
-    assert!(matches!(outcome, dp_editor::commands::CommandOutcome::Ok { .. }));
+    assert!(matches!(
+        outcome,
+        dp_editor::commands::CommandOutcome::Ok { .. }
+    ));
     assert!(state.snapshot().plugins[0].enabled);
 
     let outcome = state.command(
         "plugin_remove",
         &serde_json::json!({"plugin_id": plugin.id}),
     );
-    assert!(matches!(outcome, dp_editor::commands::CommandOutcome::Ok { .. }));
+    assert!(matches!(
+        outcome,
+        dp_editor::commands::CommandOutcome::Ok { .. }
+    ));
     assert!(state.snapshot().plugins.is_empty());
 }
 

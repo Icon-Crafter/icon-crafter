@@ -144,10 +144,7 @@ fn walk_interactive(
 }
 
 fn point_in_rect(rect: Rect, point: Point) -> bool {
-    point.x >= rect.x
-        && point.x <= rect.right()
-        && point.y >= rect.y
-        && point.y <= rect.bottom()
+    point.x >= rect.x && point.x <= rect.right() && point.y >= rect.y && point.y <= rect.bottom()
 }
 
 /// Whether a node can be used as a prototype start frame.

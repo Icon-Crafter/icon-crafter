@@ -16,7 +16,9 @@ use serde::{Deserialize, Serialize};
 use crate::manifest::PluginEvent;
 use crate::permissions::Grants;
 use crate::registry::{PluginRegistry, PluginState};
-use crate::sandbox::{execute, SandboxContext, SandboxError, SandboxProposal, SandboxRequest, SandboxResponse};
+use crate::sandbox::{
+    SandboxContext, SandboxError, SandboxProposal, SandboxRequest, SandboxResponse, execute,
+};
 
 /// Maximum number of requests one handler invocation may issue.
 pub const MAX_REQUESTS_PER_CALL: usize = 128;
@@ -163,7 +165,9 @@ fn invoke(
         }
     }
 
-    let result = std::panic::catch_unwind(AssertUnwindSafe(|| handler.handle(plugin_id, call, context)));
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        handler.handle(plugin_id, call, context)
+    }));
     let requests = match result {
         Ok(Ok(requests)) => requests,
         Ok(Err(message)) => {
@@ -273,7 +277,10 @@ mod tests {
         );
         let manifest = PluginManifest::from_json(&text).unwrap();
         registry
-            .install(manifest.clone(), Grants::from_permissions(&manifest.permissions))
+            .install(
+                manifest.clone(),
+                Grants::from_permissions(&manifest.permissions),
+            )
             .unwrap();
         registry.enable(id).unwrap();
     }
@@ -302,7 +309,10 @@ mod tests {
         assert_eq!(report.errors.len(), 1);
         assert_eq!(report.errors[0].plugin_id, "plugin-a");
         assert_eq!(registry.get("plugin-a").unwrap().state, PluginState::Error);
-        assert_eq!(registry.get("plugin-b").unwrap().state, PluginState::Enabled);
+        assert_eq!(
+            registry.get("plugin-b").unwrap().state,
+            PluginState::Enabled
+        );
     }
 
     #[test]
@@ -344,7 +354,10 @@ mod tests {
         };
         let report = run_command(&mut handler, &mut registry, "plugin-a", "nope", &context);
         assert!(report.errors[0].message.contains("not declared"));
-        assert_eq!(registry.get("plugin-a").unwrap().state, PluginState::Enabled);
+        assert_eq!(
+            registry.get("plugin-a").unwrap().state,
+            PluginState::Enabled
+        );
     }
 
     #[test]

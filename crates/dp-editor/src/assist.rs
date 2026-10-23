@@ -206,7 +206,11 @@ impl EditorState {
     }
 
     /// Enables or disables a plugin. Returns the new state.
-    pub fn plugin_set_enabled(&mut self, plugin_id: &str, enabled: bool) -> Result<bool, EditorError> {
+    pub fn plugin_set_enabled(
+        &mut self,
+        plugin_id: &str,
+        enabled: bool,
+    ) -> Result<bool, EditorError> {
         if enabled {
             self.plugins.enable(plugin_id).map_err(registry_error)?;
         } else {
@@ -251,7 +255,10 @@ mod tests {
             .expect("offline layout");
         assert!(steps >= 3);
         assert!(state.last_ai_proposal.is_some());
-        assert!(state.page().nodes.is_empty(), "preview must not mutate the document");
+        assert!(
+            state.page().nodes.is_empty(),
+            "preview must not mutate the document"
+        );
         let applied = state.ai_apply_last_proposal(false).expect("apply");
         assert_eq!(applied, steps);
         assert!(state.page().nodes.len() >= 3);
@@ -282,9 +289,7 @@ mod tests {
         let text = state.ai_text_task("explain", "frame Login").expect("text");
         assert!(!text.is_empty());
         assert!(state.status.contains("AI (explain)"));
-        assert!(state
-            .ai_text_task("unknown-task", "")
-            .is_err());
+        assert!(state.ai_text_task("unknown-task", "").is_err());
     }
 
     #[test]

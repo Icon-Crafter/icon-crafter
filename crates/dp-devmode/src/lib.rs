@@ -15,16 +15,14 @@ pub mod codegen;
 pub mod inspect;
 pub mod workbench;
 
-pub use codegen::{
-    generate, CodeTarget, CodegenError, CodegenOptions, GeneratedCode,
-};
+pub use codegen::{CodeTarget, CodegenError, CodegenOptions, GeneratedCode, generate};
 pub use inspect::{
-    document_mode, inspect, inspect_node, ComponentInfo, EffectInfo, GradientStopInfo, InspectSnapshot,
-    NodeInspect, PaintInfo, StrokeInfo, TextInfo,
+    ComponentInfo, EffectInfo, GradientStopInfo, InspectSnapshot, NodeInspect, PaintInfo,
+    StrokeInfo, TextInfo, document_mode, inspect, inspect_node,
 };
 pub use workbench::{
-    compare_documents, Annotation, AnnotationKind, DiffCounts, Handoff, HandoffStatus, NodeChange,
-    NodeDiff, RevisionDiff,
+    Annotation, AnnotationKind, DiffCounts, Handoff, HandoffStatus, NodeChange, NodeDiff,
+    RevisionDiff, compare_documents,
 };
 
 /// Version of the Dev Mode API surface.

@@ -8,6 +8,7 @@
  */
 import type {
   AddAnnotationArgs,
+  AiTextTask,
   CodegenTarget,
   CommandArgs,
   CommandName,
@@ -229,5 +230,55 @@ export class EnginePump {
   prototypeBack(): Promise<EngineState> {
     this.flushPending();
     return this.enqueue(() => this.transport.prototypeBack()).then(this.apply);
+  }
+
+  aiGenerateLayout(args: { prompt: string; width?: number; height?: number }): Promise<EngineState> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.aiGenerateLayout(args)).then(this.apply);
+  }
+
+  aiApplyLast(args: { confirmed?: boolean } = {}): Promise<EngineState> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.aiApplyLast(args)).then(this.apply);
+  }
+
+  aiDiscardLast(): Promise<EngineState> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.aiDiscardLast()).then(this.apply);
+  }
+
+  aiRenameLayers(): Promise<EngineState> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.aiRenameLayers()).then(this.apply);
+  }
+
+  aiTextTask(args: { task: AiTextTask; input: string }): Promise<EngineState> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.aiTextTask(args)).then(this.apply);
+  }
+
+  pluginInstall(args: { manifest: Record<string, unknown> | string }): Promise<EngineState> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.pluginInstall(args)).then(this.apply);
+  }
+
+  pluginInstallExample(): Promise<EngineState> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.pluginInstallExample()).then(this.apply);
+  }
+
+  pluginRemove(pluginId: string): Promise<EngineState> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.pluginRemove(pluginId)).then(this.apply);
+  }
+
+  pluginSetEnabled(pluginId: string, enabled: boolean): Promise<EngineState> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.pluginSetEnabled(pluginId, enabled)).then(this.apply);
+  }
+
+  pluginSetSetting(pluginId: string, key: string, value: unknown): Promise<EngineState> {
+    this.flushPending();
+    return this.enqueue(() => this.transport.pluginSetSetting(pluginId, key, value)).then(this.apply);
   }
 }

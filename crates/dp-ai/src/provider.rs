@@ -81,7 +81,9 @@ impl OfflineProvider {
     pub fn layout_intents(prompt: &str) -> Vec<IntentOp> {
         let lower = prompt.to_ascii_lowercase();
         let mut ops = Vec::new();
-        let seed = prompt.bytes().fold(17u32, |acc, byte| acc.wrapping_mul(31).wrapping_add(byte as u32));
+        let seed = prompt.bytes().fold(17u32, |acc, byte| {
+            acc.wrapping_mul(31).wrapping_add(byte as u32)
+        });
         let accent = match seed % 3 {
             0 => "#ff6b4a",
             1 => "#4fd1c5",
@@ -293,7 +295,11 @@ impl AiProvider for OfflineProvider {
                 model: "offline-rules-v1".to_owned(),
                 text: format!(
                     "Offline analysis: the prompt {} describes a layout; the built-in provider only produces structured intents, so connect a model provider for prose answers.",
-                    if request.prompt.trim().is_empty() { "is empty" } else { "received" }
+                    if request.prompt.trim().is_empty() {
+                        "is empty"
+                    } else {
+                        "received"
+                    }
                 ),
             });
         }
@@ -303,7 +309,8 @@ impl AiProvider for OfflineProvider {
             "{}".to_owned()
         } else {
             let intents = OfflineProvider::layout_intents(&request.prompt);
-            serde_json::to_string(&intents).map_err(|error| ProviderError::Transport(error.to_string()))?
+            serde_json::to_string(&intents)
+                .map_err(|error| ProviderError::Transport(error.to_string()))?
         };
         Ok(Completion {
             model: "offline-rules-v1".to_owned(),
@@ -331,11 +338,14 @@ pub struct OpenAiCompatibleProvider {
 impl OpenAiCompatibleProvider {
     /// Reads configuration from the environment.
     pub fn from_env() -> Result<OpenAiCompatibleProvider, ProviderError> {
-        let endpoint = std::env::var("ICONCRAFTER_AI_ENDPOINT")
-            .map_err(|_| ProviderError::NotConfigured("ICONCRAFTER_AI_ENDPOINT is not set".to_owned()))?;
-        let model = std::env::var("ICONCRAFTER_AI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_owned());
-        let api_key = std::env::var("ICONCRAFTER_AI_KEY")
-            .map_err(|_| ProviderError::NotConfigured("ICONCRAFTER_AI_KEY is not set".to_owned()))?;
+        let endpoint = std::env::var("ICONCRAFTER_AI_ENDPOINT").map_err(|_| {
+            ProviderError::NotConfigured("ICONCRAFTER_AI_ENDPOINT is not set".to_owned())
+        })?;
+        let model =
+            std::env::var("ICONCRAFTER_AI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_owned());
+        let api_key = std::env::var("ICONCRAFTER_AI_KEY").map_err(|_| {
+            ProviderError::NotConfigured("ICONCRAFTER_AI_KEY is not set".to_owned())
+        })?;
         if endpoint.trim().is_empty() {
             return Err(ProviderError::NotConfigured("empty endpoint".to_owned()));
         }
@@ -390,7 +400,9 @@ impl AiProvider for OpenAiCompatibleProvider {
                 .and_then(|error| error.get("message"))
                 .and_then(|message| message.as_str())
                 .unwrap_or("provider rejected the request");
-            return Err(ProviderError::Transport(format!("HTTP {status}: {message}")));
+            return Err(ProviderError::Transport(format!(
+                "HTTP {status}: {message}"
+            )));
         }
         let text = payload
             .get("choices")
@@ -414,7 +426,9 @@ impl AiProvider for OpenAiCompatibleProvider {
 pub fn provider_from_env() -> Box<dyn AiProvider> {
     #[cfg(feature = "http")]
     {
-        if std::env::var("ICONCRAFTER_AI_ENDPOINT").is_ok() && std::env::var("ICONCRAFTER_AI_KEY").is_ok() {
+        if std::env::var("ICONCRAFTER_AI_ENDPOINT").is_ok()
+            && std::env::var("ICONCRAFTER_AI_KEY").is_ok()
+        {
             if let Ok(provider) = OpenAiCompatibleProvider::from_env() {
                 return Box::new(provider);
             }
@@ -439,34 +453,57 @@ mod tests {
     #[test]
     fn offline_produces_valid_json_intents() {
         let mut provider = OfflineProvider::new();
-        let completion = provider.complete(&request("Design a login screen", true)).unwrap();
-        let intents: Vec<IntentOp> = serde_json::from_str(&completion.text).expect("valid intent json");
+        let completion = provider
+            .complete(&request("Design a login screen", true))
+            .unwrap();
+        let intents: Vec<IntentOp> =
+            serde_json::from_str(&completion.text).expect("valid intent json");
         assert!(!intents.is_empty());
-        assert!(intents.iter().any(|op| matches!(op, IntentOp::AddFrame { .. })));
+        assert!(
+            intents
+                .iter()
+                .any(|op| matches!(op, IntentOp::AddFrame { .. }))
+        );
     }
 
     #[test]
     fn offline_is_deterministic() {
         let mut provider = OfflineProvider::new();
-        let first = provider.complete(&request("dashboard for analysts", true)).unwrap();
-        let second = provider.complete(&request("dashboard for analysts", true)).unwrap();
+        let first = provider
+            .complete(&request("dashboard for analysts", true))
+            .unwrap();
+        let second = provider
+            .complete(&request("dashboard for analysts", true))
+            .unwrap();
         assert_eq!(first.text, second.text);
     }
 
     #[test]
     fn offline_variants_cover_dashboard_login_and_generic() {
         let dashboard = OfflineProvider::layout_intents("admin dashboard");
-        assert!(dashboard.iter().any(|op| matches!(op, IntentOp::AddRectangle { name, .. } if name == "Sidebar")));
+        assert!(
+            dashboard
+                .iter()
+                .any(|op| matches!(op, IntentOp::AddRectangle { name, .. } if name == "Sidebar"))
+        );
         let login = OfflineProvider::layout_intents("login screen for a mobile app");
-        assert!(login.iter().any(|op| matches!(op, IntentOp::AddRectangle { name, .. } if name == "Sign in button")));
+        assert!(login.iter().any(
+            |op| matches!(op, IntentOp::AddRectangle { name, .. } if name == "Sign in button")
+        ));
         let generic = OfflineProvider::layout_intents("a screen");
-        assert!(generic.iter().any(|op| matches!(op, IntentOp::AddFrame { name, .. } if name == "Screen")));
+        assert!(
+            generic
+                .iter()
+                .any(|op| matches!(op, IntentOp::AddFrame { name, .. } if name == "Screen"))
+        );
     }
 
     #[test]
     fn offline_answers_prose_requests_without_faking_model_output() {
         let mut provider = OfflineProvider::new();
-        let completion = provider.complete(&request("Explain this component", false)).unwrap();
+        let completion = provider
+            .complete(&request("Explain this component", false))
+            .unwrap();
         assert!(completion.text.contains("Offline analysis"));
         assert_eq!(provider.label(), "Offline (built-in)");
         assert!(provider.is_available());

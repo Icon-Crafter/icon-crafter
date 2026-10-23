@@ -205,7 +205,9 @@ pub fn execute(
     request: &SandboxRequest,
 ) -> Result<SandboxResponse, SandboxError> {
     match request {
-        SandboxRequest::GetDocumentSummary | SandboxRequest::GetNode { .. } | SandboxRequest::GetPageNodes { .. } => {
+        SandboxRequest::GetDocumentSummary
+        | SandboxRequest::GetNode { .. }
+        | SandboxRequest::GetPageNodes { .. } => {
             authorize(grants, "read_document")?;
         }
         SandboxRequest::GetSelection => authorize(grants, "read_selection")?,
@@ -259,10 +261,13 @@ pub fn execute(
             })
         }
         SandboxRequest::GetPageNodes { page, limit } => {
-            let page_data = context.document.page(*page).ok_or_else(|| SandboxError::Unknown {
-                kind: "page",
-                id: page.to_string(),
-            })?;
+            let page_data = context
+                .document
+                .page(*page)
+                .ok_or_else(|| SandboxError::Unknown {
+                    kind: "page",
+                    id: page.to_string(),
+                })?;
             let limit = (*limit).clamp(1, MAX_NODES_PER_REQUEST);
             let mut nodes = Vec::new();
             let mut truncated = false;
@@ -294,20 +299,23 @@ pub fn execute(
                 kind: format!("{:?}", found.resolved_type).to_lowercase(),
             })
         }
-        SandboxRequest::ProposeInsert {
-            page,
-            node,
-            parent,
-        } => {
-            let page_data = context.document.page(*page).ok_or_else(|| SandboxError::Unknown {
-                kind: "page",
-                id: page.to_string(),
-            })?;
-            if let Some(parent_id) = parent {
-                let parent_node = page_data.nodes.get(parent_id).ok_or_else(|| SandboxError::Unknown {
-                    kind: "node",
-                    id: parent_id.to_string(),
+        SandboxRequest::ProposeInsert { page, node, parent } => {
+            let page_data = context
+                .document
+                .page(*page)
+                .ok_or_else(|| SandboxError::Unknown {
+                    kind: "page",
+                    id: page.to_string(),
                 })?;
+            if let Some(parent_id) = parent {
+                let parent_node =
+                    page_data
+                        .nodes
+                        .get(parent_id)
+                        .ok_or_else(|| SandboxError::Unknown {
+                            kind: "node",
+                            id: parent_id.to_string(),
+                        })?;
                 if !parent_node.kind.is_container() {
                     return Err(SandboxError::Invalid(format!(
                         "node '{}' cannot contain children",
@@ -325,12 +333,14 @@ pub fn execute(
             })
         }
         SandboxRequest::ProposePatch { node, patch } => {
-            let page_id = context.document.page_containing(*node).ok_or_else(|| {
-                SandboxError::Unknown {
-                    kind: "node",
-                    id: node.to_string(),
-                }
-            })?;
+            let page_id =
+                context
+                    .document
+                    .page_containing(*node)
+                    .ok_or_else(|| SandboxError::Unknown {
+                        kind: "node",
+                        id: node.to_string(),
+                    })?;
             if let Some(name) = &patch.name {
                 check_strings(name)?;
             }
@@ -361,12 +371,13 @@ pub fn execute(
                     Some(existing) if existing != found => {
                         return Err(SandboxError::Invalid(
                             "all deleted nodes must live on one page".to_owned(),
-                        ))
+                        ));
                     }
                     Some(_) => {}
                 }
             }
-            let page = page_id.ok_or_else(|| SandboxError::Invalid("empty delete list".to_owned()))?;
+            let page =
+                page_id.ok_or_else(|| SandboxError::Invalid("empty delete list".to_owned()))?;
             Ok(SandboxResponse::Proposed {
                 proposal: SandboxProposal::Delete {
                     page,
@@ -389,7 +400,9 @@ pub fn execute(
                 }
             }
             Ok(SandboxResponse::Proposed {
-                proposal: SandboxProposal::Selection { nodes: nodes.clone() },
+                proposal: SandboxProposal::Selection {
+                    nodes: nodes.clone(),
+                },
             })
         }
     }
@@ -444,7 +457,11 @@ mod tests {
         let mut document = Document::new("Sandbox");
         let page = document.active_page_id();
         let node = Node::rectangle("Card", 0.0, 0.0, 100.0, 50.0);
-        document.page_mut(page).unwrap().insert_node(node, None, None).unwrap();
+        document
+            .page_mut(page)
+            .unwrap()
+            .insert_node(node, None, None)
+            .unwrap();
         document
     }
 
@@ -457,13 +474,26 @@ mod tests {
             selection: &[],
         };
         let grants = Grants::from_permissions(&manifest.permissions);
-        assert!(execute(&manifest, &grants, &context, &SandboxRequest::GetDocumentSummary).is_ok());
+        assert!(
+            execute(
+                &manifest,
+                &grants,
+                &context,
+                &SandboxRequest::GetDocumentSummary
+            )
+            .is_ok()
+        );
         // Revoking both the write and its implied read is denied.
         let mut revoked = grants.clone();
         revoked.revoke("read_document");
         revoked.revoke("write_document");
         assert!(matches!(
-            execute(&manifest, &revoked, &context, &SandboxRequest::GetDocumentSummary),
+            execute(
+                &manifest,
+                &revoked,
+                &context,
+                &SandboxRequest::GetDocumentSummary
+            ),
             Err(SandboxError::Denied(_))
         ));
         // Grants outside the manifest are rejected.
@@ -559,26 +589,30 @@ mod tests {
         };
         let grants = Grants::from_permissions(&manifest.permissions);
         let node = Node::rectangle("Child", 0.0, 0.0, 10.0, 10.0);
-        assert!(execute(
-            &manifest,
-            &grants,
-            &context,
-            &SandboxRequest::ProposeInsert {
-                page,
-                node,
-                parent: Some(NodeId::new_v4()),
-            }
-        )
-        .is_err());
-        assert!(execute(
-            &manifest,
-            &grants,
-            &context,
-            &SandboxRequest::ProposeDelete {
-                nodes: vec![NodeId::new_v4()]
-            }
-        )
-        .is_err());
+        assert!(
+            execute(
+                &manifest,
+                &grants,
+                &context,
+                &SandboxRequest::ProposeInsert {
+                    page,
+                    node,
+                    parent: Some(NodeId::new_v4()),
+                }
+            )
+            .is_err()
+        );
+        assert!(
+            execute(
+                &manifest,
+                &grants,
+                &context,
+                &SandboxRequest::ProposeDelete {
+                    nodes: vec![NodeId::new_v4()]
+                }
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -594,8 +628,16 @@ mod tests {
             }"#,
         )
         .unwrap();
-        assert!(validate_setting_value(&manifest, "mode", &Value::String("b".into())));
-        assert!(!validate_setting_value(&manifest, "mode", &Value::String("c".into())));
+        assert!(validate_setting_value(
+            &manifest,
+            "mode",
+            &Value::String("b".into())
+        ));
+        assert!(!validate_setting_value(
+            &manifest,
+            "mode",
+            &Value::String("c".into())
+        ));
         assert!(!validate_setting_value(&manifest, "missing", &Value::Null));
     }
 }

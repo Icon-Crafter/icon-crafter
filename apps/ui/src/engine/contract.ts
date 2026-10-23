@@ -552,6 +552,36 @@ export interface PrototypeState {
   hotspots?: PrototypeHotspot[];
 }
 
+/** Tasks accepted by `ai_text_task`; the engine returns prose only. */
+export type AiTextTask = "improve" | "explain" | "content" | "style" | "comments";
+
+/** Additive snapshot field describing a pending (unapplied) AI proposal. */
+export interface SnapshotAiPreview {
+  /** "offline" for the deterministic local provider, "remote" for a hosted model. */
+  source: string;
+  /** One human-readable line per proposed step. */
+  summary: string[];
+  warnings: string[];
+  /** True when applying would delete or destructively rewrite existing content. */
+  requires_confirmation: boolean;
+  steps: number;
+}
+
+/** A validated plugin installed in the engine. */
+export interface SnapshotPlugin {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  enabled: boolean;
+  state: "disabled" | "enabled" | "error";
+  last_error: string | null;
+  /** Current typed settings, already validated against the manifest. */
+  settings: Record<string, unknown>;
+  /** Validated manifest including permissions/commands/panels/settings. */
+  manifest: Record<string, unknown>;
+}
+
 export interface EngineState {
   doc: DocMeta | null;
   /** Bumps on any document mutation (undo included). */
@@ -571,6 +601,10 @@ export interface EngineState {
   text_edit: TextEditState | null;
   /** Prototype presentation session, null when not presenting. */
   prototype: PrototypeState | null;
+  /** Pending AI proposal, null when there is nothing to review. */
+  ai_preview?: SnapshotAiPreview | null;
+  /** Installed plugins reported by the engine. */
+  plugins?: SnapshotPlugin[];
   errors: EngineError[];
   status: string | null;
 }
@@ -1081,6 +1115,8 @@ export function initialEngineState(viewport: Viewport = DEFAULT_VIEWPORT): Engin
     selection_details: [],
     text_edit: null,
     prototype: null,
+    ai_preview: null,
+    plugins: [],
     errors: [],
     status: null,
   };

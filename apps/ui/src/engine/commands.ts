@@ -45,6 +45,14 @@ interface CommandOptions {
   quiet?: boolean;
 }
 
+/** Result of an engine call that a panel wants to render inline (error) as well as toast. */
+export interface EngineCallResult {
+  state: EngineState | null;
+  error: string | null;
+}
+
+type ActivePump = NonNullable<ReturnType<typeof getActivePump>>;
+
 const FILTER_DOCUMENT = [{ name: "Icon Crafter document", extensions: ["iconcrafter"] }];
 const FILTER_SVG = [{ name: "SVG", extensions: ["svg"] }];
 const FILTER_IMAGES = [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }];
@@ -819,6 +827,154 @@ export async function setActiveVariableMode(collectionId: string, modeId: string
     mode_id: modeId,
   });
   if (state) toastInfo(en.toasts.modeChanged);
+}
+
+// ---------------------------------------------------------------------------
+// AI assistant
+// ---------------------------------------------------------------------------
+
+/** Runs an engine call and reports thrown errors as toasts; also returns the message. */
+async function runGuarded(run: (pump: ActivePump) => Promise<EngineState>): Promise<EngineCallResult> {
+  const pump = getActivePump();
+  if (!pump) return { state: null, error: en.app.engineConnecting };
+  try {
+    return { state: await run(pump), error: null };
+  } catch (error) {
+    const normalized = normalizeEngineError(error);
+    useAppStore.getState().reportEngineError(normalized);
+    return { state: null, error: normalized.message };
+  }
+}
+
+function aiCapabilityGate(): boolean {
+  if (engineCapabilities().ai) return true;
+  useAppStore.getState().pushToast({
+    kind: "warning",
+    title: format(en.toasts.unsupported, { command: en.ai.label }),
+    message: en.toasts.capabilityUnavailable,
+  });
+  return false;
+}
+
+function pluginCapabilityGate(): boolean {
+  if (engineCapabilities().plugins) return true;
+  useAppStore.getState().pushToast({
+    kind: "warning",
+    title: format(en.toasts.unsupported, { command: en.plugins.label }),
+    message: en.toasts.capabilityUnavailable,
+  });
+  return false;
+}
+
+/** Opens the AI assistant panel (toolbar entry point). */
+export function toggleAiPanel(): void {
+  if (!aiCapabilityGate()) return;
+  const ui = useUiStore.getState();
+  ui.setRightPanel(ui.rightPanel === "ai" ? "design" : "ai");
+}
+
+export async function aiGenerateLayout(
+  prompt: string,
+  width?: number,
+  height?: number,
+): Promise<EngineCallResult> {
+  if (!aiCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
+  const trimmed = prompt.trim();
+  if (trimmed === "") return { state: null, error: en.ai.promptRequired };
+  return runGuarded((pump) => pump.aiGenerateLayout({ prompt: trimmed, width, height }));
+}
+
+export async function aiApplyLast(confirmed = false): Promise<EngineCallResult> {
+  if (!aiCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
+  const result = await runGuarded((pump) => pump.aiApplyLast({ confirmed }));
+  if (result.state && result.error === null) toastInfo(en.toasts.aiApplied);
+  return result;
+}
+
+export async function aiDiscardLast(): Promise<EngineCallResult> {
+  if (!aiCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
+  const result = await runGuarded((pump) => pump.aiDiscardLast());
+  if (result.state && result.error === null) toastInfo(en.toasts.aiDiscarded);
+  return result;
+}
+
+export async function aiRenameLayers(): Promise<EngineCallResult> {
+  if (!aiCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
+  const result = await runGuarded((pump) => pump.aiRenameLayers());
+  if (result.state && result.error === null) toastInfo(en.toasts.aiRenamed);
+  return result;
+}
+
+export async function aiTextTask(task: string, input: string): Promise<EngineCallResult> {
+  if (!aiCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
+  const trimmed = input.trim();
+  if (trimmed === "") return { state: null, error: en.ai.inputRequired };
+  return runGuarded((pump) =>
+    pump.aiTextTask({ task: task as Parameters<ActivePump["aiTextTask"]>[0]["task"], input: trimmed }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Plugins
+// ---------------------------------------------------------------------------
+
+/** Opens the plugin manager panel (toolbar entry point). */
+export function togglePluginsPanel(): void {
+  if (!pluginCapabilityGate()) return;
+  const ui = useUiStore.getState();
+  ui.setRightPanel(ui.rightPanel === "plugins" ? "design" : "plugins");
+}
+
+export async function pluginInstall(manifest: Record<string, unknown> | string): Promise<EngineCallResult> {
+  if (!pluginCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
+  const result = await runGuarded((pump) => pump.pluginInstall({ manifest }));
+  if (result.state && result.error === null) toastInfo(en.toasts.pluginInstalled);
+  return result;
+}
+
+export async function pluginInstallExample(): Promise<EngineCallResult> {
+  if (!pluginCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
+  const result = await runGuarded((pump) => pump.pluginInstallExample());
+  if (result.state && result.error === null) toastInfo(en.toasts.pluginInstalled);
+  return result;
+}
+
+export async function pluginRemove(pluginId: string): Promise<EngineCallResult> {
+  if (!pluginCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
+  const result = await runGuarded((pump) => pump.pluginRemove(pluginId));
+  if (result.state && result.error === null) toastInfo(en.toasts.pluginRemoved);
+  return result;
+}
+
+export async function pluginSetEnabled(pluginId: string, enabled: boolean): Promise<EngineCallResult> {
+  if (!pluginCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
+  const result = await runGuarded((pump) => pump.pluginSetEnabled(pluginId, enabled));
+  if (result.state && result.error === null) {
+    toastInfo(enabled ? en.toasts.pluginEnabled : en.toasts.pluginDisabled);
+  }
+  return result;
+}
+
+export async function pluginSetSetting(
+  pluginId: string,
+  key: string,
+  value: unknown,
+): Promise<EngineCallResult> {
+  if (!pluginCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
+  return runGuarded((pump) => pump.pluginSetSetting(pluginId, key, value));
+}
+
+/** Removes a plugin after a confirmation dialog. */
+export function confirmRemovePlugin(pluginId: string, pluginName: string): void {
+  useUiStore.getState().openConfirm({
+    title: en.plugins.removeTitle,
+    body: format(en.plugins.removeBody, { name: pluginName }),
+    confirmLabel: en.common.delete,
+    danger: true,
+    onConfirm: async () => {
+      await pluginRemove(pluginId);
+    },
+  });
 }
 
 /**

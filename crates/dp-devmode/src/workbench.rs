@@ -414,8 +414,12 @@ mod tests {
         // add a second node
         {
             let page = after.page_mut(page_id).expect("page");
-            page.insert_node(Node::rectangle("Spacer", 200.0, 0.0, 10.0, 40.0), None, None)
-                .unwrap();
+            page.insert_node(
+                Node::rectangle("Spacer", 200.0, 0.0, 10.0, 40.0),
+                None,
+                None,
+            )
+            .unwrap();
         }
         let diff = compare_documents(&before, &after);
         assert_eq!(diff.counts.added, 1);
@@ -441,6 +445,9 @@ mod tests {
         let clone = document.clone();
         let diff = compare_documents(&document, &clone);
         assert!(diff.is_empty());
-        assert_eq!(diff.counts.added + diff.counts.removed + diff.counts.changed, 0);
+        assert_eq!(
+            diff.counts.added + diff.counts.removed + diff.counts.changed,
+            0
+        );
     }
 }

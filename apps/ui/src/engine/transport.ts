@@ -16,6 +16,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import type {
   AddAnnotationArgs,
+  AiTextTask,
   Bootstrap,
   CodegenTarget,
   CommandArgs,
@@ -102,6 +103,23 @@ export interface EngineTransport {
   prototypePlay(frameId?: string): Promise<EngineState>;
   prototypeStop(): Promise<EngineState>;
   prototypeBack(): Promise<EngineState>;
+  /** AI: builds a validated layout proposal without applying anything. */
+  aiGenerateLayout(args: { prompt: string; width?: number; height?: number }): Promise<EngineState>;
+  /** AI: applies the pending proposal as one undoable transaction. */
+  aiApplyLast(args?: { confirmed?: boolean }): Promise<EngineState>;
+  /** AI: clears the pending proposal. */
+  aiDiscardLast(): Promise<EngineState>;
+  /** AI: renames the selection (or up to 100 page layers) with suggested names. */
+  aiRenameLayers(): Promise<EngineState>;
+  /** AI: prose task; the result is reported in `EngineState.status`. */
+  aiTextTask(args: { task: AiTextTask; input: string }): Promise<EngineState>;
+  /** Plugins: installs a validated manifest (parsed object or JSON text). */
+  pluginInstall(args: { manifest: Record<string, unknown> | string }): Promise<EngineState>;
+  /** Plugins: installs the bundled example plugin. */
+  pluginInstallExample(): Promise<EngineState>;
+  pluginRemove(pluginId: string): Promise<EngineState>;
+  pluginSetEnabled(pluginId: string, enabled: boolean): Promise<EngineState>;
+  pluginSetSetting(pluginId: string, key: string, value: unknown): Promise<EngineState>;
   pickSavePath(options: PickSaveOptions): Promise<string | null>;
   pickOpenPath(options?: PickOpenOptions): Promise<string | null>;
 }
@@ -315,6 +333,50 @@ export class TauriTransport implements EngineTransport {
 
   prototypeBack(): Promise<EngineState> {
     return invoke<EngineState>("prototype_back", {});
+  }
+
+  aiGenerateLayout(args: { prompt: string; width?: number; height?: number }): Promise<EngineState> {
+    return invoke<EngineState>("ai_generate_layout", {
+      prompt: args.prompt,
+      width: args.width ?? null,
+      height: args.height ?? null,
+    });
+  }
+
+  aiApplyLast(args: { confirmed?: boolean } = {}): Promise<EngineState> {
+    return invoke<EngineState>("ai_apply_last", { confirmed: args.confirmed ?? null });
+  }
+
+  aiDiscardLast(): Promise<EngineState> {
+    return invoke<EngineState>("ai_discard_last", {});
+  }
+
+  aiRenameLayers(): Promise<EngineState> {
+    return invoke<EngineState>("ai_rename_layers", {});
+  }
+
+  aiTextTask(args: { task: AiTextTask; input: string }): Promise<EngineState> {
+    return invoke<EngineState>("ai_text_task", { task: args.task, input: args.input });
+  }
+
+  pluginInstall(args: { manifest: Record<string, unknown> | string }): Promise<EngineState> {
+    return invoke<EngineState>("plugin_install", { manifest: args.manifest });
+  }
+
+  pluginInstallExample(): Promise<EngineState> {
+    return invoke<EngineState>("plugin_install_example", {});
+  }
+
+  pluginRemove(pluginId: string): Promise<EngineState> {
+    return invoke<EngineState>("plugin_remove", { plugin_id: pluginId });
+  }
+
+  pluginSetEnabled(pluginId: string, enabled: boolean): Promise<EngineState> {
+    return invoke<EngineState>("plugin_set_enabled", { plugin_id: pluginId, enabled });
+  }
+
+  pluginSetSetting(pluginId: string, key: string, value: unknown): Promise<EngineState> {
+    return invoke<EngineState>("plugin_set_setting", { plugin_id: pluginId, key, value });
   }
 
   async pickSavePath(options: PickSaveOptions): Promise<string | null> {

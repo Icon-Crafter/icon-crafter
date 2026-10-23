@@ -451,9 +451,10 @@ impl EditorState {
     /// Starts prototype presentation (or stops it when already presenting is
     /// not requested). `frame_id` defaults to the document's start frame.
     pub fn prototype_play(&mut self, frame_id: Option<NodeId>) -> Result<(), EditorError> {
-        let runtime = dp_prototype::PrototypeRuntime::start(&self.document, frame_id).map_err(
-            |error| EditorError::InvalidArguments(format!("cannot start prototype: {error}")),
-        )?;
+        let runtime =
+            dp_prototype::PrototypeRuntime::start(&self.document, frame_id).map_err(|error| {
+                EditorError::InvalidArguments(format!("cannot start prototype: {error}"))
+            })?;
         let frame = runtime.current_frame();
         if !playback::is_frame(&self.document, frame) {
             return Err(EditorError::InvalidArguments(
@@ -473,7 +474,8 @@ impl EditorState {
             .node(frame)
             .map(|node| node.name.clone())
             .unwrap_or_default();
-        self.status = format!("Presenting {name} — click hotspots, Backspace to go back, Esc to exit");
+        self.status =
+            format!("Presenting {name} — click hotspots, Backspace to go back, Esc to exit");
         Ok(())
     }
 
@@ -624,12 +626,7 @@ impl EditorState {
     }
 
     /// Marks the current handoff readiness.
-    pub fn dev_mark_ready(
-        &mut self,
-        status: dp_devmode::HandoffStatus,
-        by: String,
-        at: String,
-    ) {
+    pub fn dev_mark_ready(&mut self, status: dp_devmode::HandoffStatus, by: String, at: String) {
         self.handoff.revision = self.document.revision;
         self.handoff.mark_ready(status, by, at);
     }
@@ -678,13 +675,8 @@ impl EditorState {
             prototype: Some(Some(prototype)),
             ..Default::default()
         };
-        let transaction = dp_model::ops::patch_nodes(
-            &self.document,
-            &[node_id],
-            patch,
-            "Add interaction",
-            None,
-        )?;
+        let transaction =
+            dp_model::ops::patch_nodes(&self.document, &[node_id], patch, "Add interaction", None)?;
         self.apply(transaction)?;
         self.status = "Added interaction".to_owned();
         Ok(())
@@ -1031,7 +1023,10 @@ impl EditorState {
             // While a DOM textarea owns the text being edited, the engine must
             // not paint the same text underneath it (double-vision in the UI).
             if let Some(edit) = &self.text_edit
-                && let Some(item) = list.items.iter_mut().find(|item| item.node_id == edit.node_id)
+                && let Some(item) = list
+                    .items
+                    .iter_mut()
+                    .find(|item| item.node_id == edit.node_id)
             {
                 item.text = None;
             }
@@ -1224,6 +1219,38 @@ impl EditorState {
         )?;
         self.status = format!("Exported PDF {}", path.as_ref().display());
         Ok(path.as_ref().to_path_buf())
+    }
+
+    /// Exports the current page (or one frame) as a static website bundle
+    /// (`index.html` + `styles.css`) into `directory`.
+    ///
+    /// This is the engine half of the website-design workflow: frames become
+    /// sections, layers absolute CSS boxes, text stays real text, vectors become
+    /// inline SVG and prototype `navigate_to` links become anchors. The returned
+    /// warnings (surfaced through the export status) list everything that still
+    /// needs manual work.
+    pub fn export_html(
+        &mut self,
+        directory: impl AsRef<Path>,
+        frame_id: Option<NodeId>,
+    ) -> Result<PathBuf, EditorError> {
+        let page_id = match frame_id {
+            Some(id) => self
+                .document
+                .locate_node(id)
+                .map(|(page, _)| page.id)
+                .ok_or_else(|| EditorError::InvalidArguments(format!("unknown node {id}")))?,
+            None => self.document.active_page_id(),
+        };
+        let options = dp_io::website::WebsiteOptions {
+            title: self.document.name.clone(),
+            root_ids: frame_id.map(|id| vec![id]).unwrap_or_default(),
+            ..dp_io::website::WebsiteOptions::default()
+        };
+        let index =
+            dp_io::website::write_website(&self.document, page_id, &options, directory.as_ref())?;
+        self.status = format!("Exported website {}", index.display());
+        Ok(index)
     }
 
     /// Imports SVG artwork from a file as a new frame on the active page.

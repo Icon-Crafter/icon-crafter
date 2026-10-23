@@ -8,8 +8,8 @@
 use std::collections::HashMap;
 
 use dp_model::{
-    ops, Color, Document, Fill, History, Node, NodeId, NodeKind, NodePatch, PageId, Transaction,
-    Transform,
+    Color, Document, Fill, History, Node, NodeId, NodeKind, NodePatch, PageId, Transaction,
+    Transform, ops,
 };
 use serde::{Deserialize, Serialize};
 
@@ -246,7 +246,13 @@ fn build_step(
             fill,
         } => {
             check_dimensions(*width, *height, warnings);
-            let mut node = Node::frame(name, *x, *y, width.clamp(1.0, MAX_DIMENSION), height.clamp(1.0, MAX_DIMENSION));
+            let mut node = Node::frame(
+                name,
+                *x,
+                *y,
+                width.clamp(1.0, MAX_DIMENSION),
+                height.clamp(1.0, MAX_DIMENSION),
+            );
             if let Some(fill) = fill {
                 node.style.fills = vec![Fill::solid(parse_color(fill)?)];
             }
@@ -273,7 +279,12 @@ fn build_step(
             let mut node = Node::new(
                 NodeKind::Rectangle,
                 name,
-                Transform::new(*x, *y, width.clamp(1.0, MAX_DIMENSION), height.clamp(1.0, MAX_DIMENSION)),
+                Transform::new(
+                    *x,
+                    *y,
+                    width.clamp(1.0, MAX_DIMENSION),
+                    height.clamp(1.0, MAX_DIMENSION),
+                ),
             );
             if let Some(fill) = fill {
                 node.style.fills = vec![Fill::solid(parse_color(fill)?)];
@@ -299,7 +310,9 @@ fn build_step(
             color,
         } => {
             if characters.chars().count() > 10_000 {
-                return Err(AiError::InvalidIntent("text is longer than 10,000 characters".to_owned()));
+                return Err(AiError::InvalidIntent(
+                    "text is longer than 10,000 characters".to_owned(),
+                ));
             }
             let parent = resolve_frame(document, frame, frames)?;
             let mut node = Node::text(name, characters, *x, *y);
@@ -351,7 +364,11 @@ fn build_step(
         }
         IntentOp::DeleteNode { node } => {
             let node_id = parse_node(document, node)?;
-            Ok(Some(ops::delete_nodes(document, &[node_id], "AI: delete node")?))
+            Ok(Some(ops::delete_nodes(
+                document,
+                &[node_id],
+                "AI: delete node",
+            )?))
         }
     }
 }
@@ -417,9 +434,7 @@ fn check_dimensions(width: f64, height: f64, warnings: &mut Vec<String>) {
     if !width.is_finite() || !height.is_finite() {
         warnings.push("non-finite dimension was clamped".to_owned());
     } else if width > MAX_DIMENSION || height > MAX_DIMENSION {
-        warnings.push(format!(
-            "dimension was clamped to {MAX_DIMENSION}"
-        ));
+        warnings.push(format!("dimension was clamped to {MAX_DIMENSION}"));
     }
 }
 
@@ -470,7 +485,10 @@ mod tests {
         let proposal = propose(&document, "offline", &login_intents(), None).unwrap();
         assert_eq!(proposal.steps.len(), 3);
         assert!(!proposal.requires_confirmation);
-        assert!(document.active_page().nodes.is_empty(), "proposal building must be side-effect free");
+        assert!(
+            document.active_page().nodes.is_empty(),
+            "proposal building must be side-effect free"
+        );
     }
 
     #[test]

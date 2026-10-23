@@ -311,9 +311,7 @@ fn boolean_subtract_renders_evaluated_geometry() {
     // A minus B: the left part of A survives, the overlap and B are gone.
     let kept = target.pixel_straight(20, 30).expect("pixel inside A");
     assert_eq!(&kept[..3], &[255, 0, 0]);
-    let removed = target
-        .pixel_straight(70, 30)
-        .expect("pixel inside B");
+    let removed = target.pixel_straight(70, 30).expect("pixel inside B");
     assert_eq!(removed[3], 0);
     let below = target.pixel_straight(20, 80).expect("pixel below A");
     assert_eq!(below[3], 0);

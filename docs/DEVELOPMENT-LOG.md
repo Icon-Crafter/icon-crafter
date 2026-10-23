@@ -431,3 +431,19 @@ HTML/CSS part of §18, without pretending it is a production site generator.
   backend-only and unverified without Docker/PostgreSQL infrastructure.
 - Next: responsive breakpoints/preview, image import, collaboration transport, remaining
   workspaces (whiteboard/slides/drawing), packaging and hardening.
+
+## Session 17 (2026-10-24) — stabilization and verified gates
+
+- Applied `cargo fmt --all` across the workspace (previously drifted in the new website and
+  IPC code) and confirmed `cargo fmt --check` is clean.
+- Ran the strict engine lint gate (`clippy -D warnings`, all targets, 13 crates) and fixed
+  the remaining lints (`dp-io` website code: needless borrows, no-effect replace). Exit 0.
+- Fully re-ran the engine suite: **327 test results, 0 failed** (the 320 engine tests plus
+  dp-io website tests and the dp-ai doc test; see docs/TESTING.md session 17 for the exact
+  command). Re-ran backend lib tests: 132 passed. Desktop IPC crate checks clean.
+- Committed the website export increment plus the formatting/lint cleanup.
+- Remaining work is explicitly tracked, not claimed: whiteboard/slides/drawing/website UI
+  workspaces, responsive website breakpoints, image import/raster assets, collaboration
+  transport (desktop↔server WS), backend integration verification (needs Docker/PostgreSQL),
+  AI/plugin UI delivery (frontend milestone 5 in flight), packaging installers and the
+  accessibility/performance follow-ups in docs/FEATURE-CHECKLIST.md.

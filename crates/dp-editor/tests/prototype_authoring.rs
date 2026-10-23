@@ -52,7 +52,10 @@ fn interactions_are_authored_and_removed_through_commands() {
         }),
     );
     assert!(
-        matches!(outcome, dp_editor::commands::CommandOutcome::Ok { changed: true }),
+        matches!(
+            outcome,
+            dp_editor::commands::CommandOutcome::Ok { changed: true }
+        ),
         "unexpected outcome: {outcome:?}"
     );
 

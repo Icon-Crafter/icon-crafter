@@ -561,10 +561,7 @@ pub fn export_pdf(state: State<'_, IpcState>, args: ExportVectorArgs) -> Result<
 }
 
 #[tauri::command]
-pub fn export_html(
-    state: State<'_, IpcState>,
-    args: ExportWebsiteArgs,
-) -> Result<Value, IpcError> {
+pub fn export_html(state: State<'_, IpcState>, args: ExportWebsiteArgs) -> Result<Value, IpcError> {
     let frame = parse_optional_id(args.frame_id, "frame id")?;
     with_editor(&state, |editor| {
         let index = editor.export_html(&args.directory, frame)?;
@@ -669,11 +666,18 @@ pub fn dev_add_annotation(
         Some(other) => {
             return Err(IpcError::validation(format!(
                 "unknown annotation kind '{other}'"
-            )))
+            )));
         }
     };
     with_editor(&state, |editor| {
-        editor.dev_add_annotation(node, body.clone(), author.clone(), created_at.clone(), kind, link.clone())?;
+        editor.dev_add_annotation(
+            node,
+            body.clone(),
+            author.clone(),
+            created_at.clone(),
+            kind,
+            link.clone(),
+        )?;
         serde_json::to_value(&editor.handoff).map_err(|error| IpcError::internal(error.to_string()))
     })
 }
@@ -707,10 +711,7 @@ pub fn dev_resolve_annotation(
 }
 
 #[tauri::command]
-pub fn dev_compare(
-    state: State<'_, IpcState>,
-    document_json: String,
-) -> Result<Value, IpcError> {
+pub fn dev_compare(state: State<'_, IpcState>, document_json: String) -> Result<Value, IpcError> {
     let other = Document::from_json_str(&document_json)
         .map_err(EditorError::from)
         .map_err(IpcError::from)?;
@@ -723,7 +724,9 @@ pub fn dev_compare(
 /// Returns the current document as canonical JSON string (Dev Mode revision capture).
 #[tauri::command]
 pub fn dev_snapshot(state: State<'_, IpcState>) -> Result<String, IpcError> {
-    with_editor(&state, |editor| editor.document_json().map_err(IpcError::from))
+    with_editor(&state, |editor| {
+        editor.document_json().map_err(IpcError::from)
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -785,7 +788,10 @@ pub fn ai_generate_layout(
 }
 
 #[tauri::command]
-pub fn ai_apply_last(state: State<'_, IpcState>, confirmed: Option<bool>) -> Result<Value, IpcError> {
+pub fn ai_apply_last(
+    state: State<'_, IpcState>,
+    confirmed: Option<bool>,
+) -> Result<Value, IpcError> {
     with_editor(&state, |editor| {
         editor.ai_apply_last_proposal(confirmed.unwrap_or(false))?;
         snapshot_json(editor)
@@ -893,9 +899,7 @@ fn parse_handoff_status(status: &str) -> Result<dp_devmode::HandoffStatus, IpcEr
     match status {
         "draft" => Ok(dp_devmode::HandoffStatus::Draft),
         "ready_for_review" | "review" => Ok(dp_devmode::HandoffStatus::ReadyForReview),
-        "ready_for_development" | "ready" => {
-            Ok(dp_devmode::HandoffStatus::ReadyForDevelopment)
-        }
+        "ready_for_development" | "ready" => Ok(dp_devmode::HandoffStatus::ReadyForDevelopment),
         "implemented" => Ok(dp_devmode::HandoffStatus::Implemented),
         other => Err(IpcError::validation(format!(
             "unknown handoff status '{other}'"

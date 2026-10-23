@@ -31,7 +31,10 @@ fn variables_summary_lists_names_types_values_and_active_mode() {
         &json!({"collection": "Theme", "name": "color/brand", "color": "#ff6b4a"}),
     );
     assert!(
-        matches!(outcome, dp_editor::commands::CommandOutcome::Ok { changed: true }),
+        matches!(
+            outcome,
+            dp_editor::commands::CommandOutcome::Ok { changed: true }
+        ),
         "unexpected outcome: {outcome:?}"
     );
     let outcome = state.command(
@@ -48,19 +51,18 @@ fn variables_summary_lists_names_types_values_and_active_mode() {
     let collection = &summary.variables[0];
     assert_eq!(collection.name, "Theme");
     assert_eq!(collection.variables.len(), 2);
-    assert!(collection
-        .variables
-        .iter()
-        .any(|variable| variable.name == "color/brand"));
+    assert!(
+        collection
+            .variables
+            .iter()
+            .any(|variable| variable.name == "color/brand")
+    );
     let brand = collection
         .variables
         .iter()
         .find(|variable| variable.name == "color/brand")
         .expect("brand variable");
-    assert!(matches!(
-        brand.resolved_type,
-        dp_model::VariableType::Color
-    ));
+    assert!(matches!(brand.resolved_type, dp_model::VariableType::Color));
     assert_eq!(brand.values.len(), 1);
     assert!(matches!(
         brand.values.values().next(),

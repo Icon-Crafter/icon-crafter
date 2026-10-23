@@ -44,7 +44,8 @@ fn build_document() -> (Document, Vec<dp_model::NodeId>) {
                     96.0,
                 );
                 let id = node.id;
-                page.insert_node(node, Some(frame_id), None).expect("insert child");
+                page.insert_node(node, Some(frame_id), None)
+                    .expect("insert child");
                 ids.push(id);
             }
         }
@@ -77,7 +78,10 @@ fn main() {
 
     let start = Instant::now();
     let _ = state.layout();
-    println!("cold layout:        {:>8.1} ms", start.elapsed().as_secs_f64() * 1000.0);
+    println!(
+        "cold layout:        {:>8.1} ms",
+        start.elapsed().as_secs_f64() * 1000.0
+    );
 
     let start = Instant::now();
     for _ in 0..10 {
@@ -144,7 +148,11 @@ fn main() {
     println!(
         "deserialize:        {:>8.1} ms ({} nodes)",
         start.elapsed().as_secs_f64() * 1000.0,
-        reloaded.pages.iter().map(|page| page.nodes.len()).sum::<usize>()
+        reloaded
+            .pages
+            .iter()
+            .map(|page| page.nodes.len())
+            .sum::<usize>()
     );
 
     let targets: Vec<dp_model::NodeId> = ids.iter().skip(1).take(50).copied().collect();

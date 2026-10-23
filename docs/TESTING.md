@@ -309,3 +309,24 @@ IPC smoke test (desktop): invoke `export_html` with `{directory: "C:/tmp/site-ex
 after drawing a frame; `index.html` and `styles.css` must exist and the HTML must contain
 the frame's text. Without a frame argument the active page exports; with a missing frame
 id the command returns a validation error.
+
+## Session 17 verification — formatting, lint gate and full engine suite
+
+```powershell
+cargo fmt --all -- --check                                    # clean (rustfmt applied)
+cargo clippy --no-default-features -p dp-geom -p dp-model -p dp-text -p dp-layout -p dp-render -p dp-io -p dp-persist -p dp-editor -p dp-collab -p dp-prototype -p dp-devmode -p dp-ai -p dp-plugins --all-targets -- -D warnings   # EXIT 0
+cargo test --no-default-features -p ...(13 crates)...            # 327 test results, 0 failed
+cargo test -p iconcrafter-server --offline --lib                 # 132 passed
+cargo check -p iconcrafter-desktop                               # EXIT 0
+```
+
+327 is the measured sum of per-binary `test result: ok. N passed` lines (includes the
+dp-ai doc test). Backend integration tests remain `#[ignore]`d because Docker/PostgreSQL is
+not available on this host — that limitation is reported, not hidden.
+
+Release desktop build (verified earlier in session 13):
+
+```powershell
+cargo build -p iconcrafter-desktop --release --features custom-protocol
+# target/release/iconcrafter-desktop.exe loads the embedded UI (tauri.localhost)
+```

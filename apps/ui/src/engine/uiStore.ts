@@ -30,6 +30,9 @@ export interface ConfirmRequest {
   onConfirm: () => void | Promise<void>;
 }
 
+/** Which right-side panel is showing when Dev Mode is off. */
+export type RightPanel = "design" | "ai" | "plugins";
+
 interface UiStore {
   canvasMenu: CanvasMenuState | null;
   layerMenu: LayerMenuState | null;
@@ -40,6 +43,7 @@ interface UiStore {
   renamingPageId: string | null;
   shortcutsOpen: boolean;
   confirm: ConfirmRequest | null;
+  rightPanel: RightPanel;
   openCanvasMenu: (x: number, y: number) => void;
   openLayerMenu: (x: number, y: number, nodeId: string) => void;
   openPageMenu: (x: number, y: number, pageId: string) => void;
@@ -49,6 +53,7 @@ interface UiStore {
   setShortcutsOpen: (open: boolean) => void;
   openConfirm: (request: ConfirmRequest) => void;
   closeConfirm: () => void;
+  setRightPanel: (panel: RightPanel) => void;
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -59,6 +64,7 @@ export const useUiStore = create<UiStore>((set) => ({
   renamingPageId: null,
   shortcutsOpen: false,
   confirm: null,
+  rightPanel: "design",
   openCanvasMenu: (x, y) => set({ canvasMenu: { x, y }, layerMenu: null, pageMenu: null }),
   openLayerMenu: (x, y, nodeId) => set({ layerMenu: { x, y, nodeId }, canvasMenu: null, pageMenu: null }),
   openPageMenu: (x, y, pageId) => set({ pageMenu: { x, y, pageId }, canvasMenu: null, layerMenu: null }),
@@ -68,4 +74,5 @@ export const useUiStore = create<UiStore>((set) => ({
   setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
   openConfirm: (confirm) => set({ confirm }),
   closeConfirm: () => set({ confirm: null }),
+  setRightPanel: (rightPanel) => set({ rightPanel }),
 }));

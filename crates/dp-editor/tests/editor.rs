@@ -434,7 +434,10 @@ fn components_can_be_created_instanced_and_detached() {
     assert!(frame.width > 0 && frame.height > 0);
 
     state
-        .command("detach_instance", &json!({ "ids": [instance_id.to_string()] }))
+        .command(
+            "detach_instance",
+            &json!({ "ids": [instance_id.to_string()] }),
+        )
         .into_ok();
     assert_eq!(
         state.document.node(instance_id).map(|node| node.kind),
@@ -461,26 +464,22 @@ fn shared_styles_can_be_created_and_applied() {
         .command("create_style_from_node", &json!({ "name": "Brand Fill" }))
         .into_ok();
     let snapshot = state.snapshot();
-    let style = snapshot
-        .summary
-        .expect("summary")
-        .styles
-        .paints[0]
-        .clone();
+    let style = snapshot.summary.expect("summary").styles.paints[0].clone();
     assert_eq!(style.name, "Brand Fill");
 
     state
-        .command(
-            "select_nodes",
-            &json!({ "ids": [target.to_string()] }),
-        )
+        .command("select_nodes", &json!({ "ids": [target.to_string()] }))
         .into_ok();
     state
         .command("apply_style", &json!({ "style_id": style.id }))
         .into_ok();
     let target_node = state.document.node(target).expect("target");
     assert_eq!(
-        target_node.style.fills.first().and_then(|fill| fill.style_id),
+        target_node
+            .style
+            .fills
+            .first()
+            .and_then(|fill| fill.style_id),
         Some(style.id)
     );
 }
@@ -560,8 +559,7 @@ fn prototype_presentation_navigates_and_goes_back() {
     hotspot.prototype = Some(PrototypeNode {
         interactions: vec![Interaction::navigate_on_click(frame_b_id)],
     });
-    page
-        .insert_node(hotspot, Some(frame_a_id), None)
+    page.insert_node(hotspot, Some(frame_a_id), None)
         .expect("hotspot");
     state.invalidate_layout();
 
@@ -582,11 +580,7 @@ fn prototype_presentation_navigates_and_goes_back() {
         state.playback.as_ref().map(|playback| playback.frame),
         Some(frame_b_id)
     );
-    assert!(state
-        .playback
-        .as_ref()
-        .expect("playback")
-        .can_back());
+    assert!(state.playback.as_ref().expect("playback").can_back());
 
     assert!(state.prototype_back().expect("navigate back"));
     assert_eq!(
@@ -595,9 +589,11 @@ fn prototype_presentation_navigates_and_goes_back() {
     );
 
     // Clicking empty canvas does nothing and keeps the current frame.
-    assert!(!state
-        .prototype_click_world(Point::new(190.0, 190.0))
-        .expect("click empty area"));
+    assert!(
+        !state
+            .prototype_click_world(Point::new(190.0, 190.0))
+            .expect("click empty area")
+    );
     state.prototype_stop();
     assert!(state.playback.is_none());
 }

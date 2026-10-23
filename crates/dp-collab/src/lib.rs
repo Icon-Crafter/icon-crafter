@@ -21,14 +21,12 @@ pub mod rga;
 pub mod session;
 
 pub use clock::{ActorId, Hlc, HlcClock};
-pub use op::{
-    Conflict, Envelope, NodeField, Op, OpError, Presence, PropsMap, PROTOCOL_VERSION,
-};
+pub use op::{Conflict, Envelope, NodeField, Op, OpError, PROTOCOL_VERSION, Presence, PropsMap};
 pub use replica::{ApplyReport, Replica};
 pub use rga::{RgaError, RgaList};
 pub use session::{
-    ClientMessage, CollabSession, ReceiveReport, ServerMessage, SessionError, SessionEvent,
-    SYNC_PROTOCOL_VERSION,
+    ClientMessage, CollabSession, ReceiveReport, SYNC_PROTOCOL_VERSION, ServerMessage,
+    SessionError, SessionEvent,
 };
 
 /// Version of the collaboration protocol crate.

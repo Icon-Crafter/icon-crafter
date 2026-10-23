@@ -21,10 +21,12 @@ import {
   Pentagon,
   PenTool,
   Plus,
+  Puzzle,
   Redo2,
   Search,
   Share2,
   SliceGlyph,
+  Sparkles,
   Square,
   Star,
   Type,
@@ -43,10 +45,13 @@ import {
   runCommand,
   runTool,
   shortcutHint,
+  toggleAiPanel,
   toggleDevMode,
+  togglePluginsPanel,
   toolShortcutHint,
 } from "../engine/commands";
 import { useDevModeStore } from "../engine/devModeStore";
+import { useUiStore } from "../engine/uiStore";
 import { MenuItem, MenuLabel, MenuSeparator, MenuSurface } from "./primitives/IconButton";
 import { IconButton } from "./primitives/IconButton";
 
@@ -96,6 +101,7 @@ export function Toolbar() {
   const pushToast = useAppStore((state) => state.pushToast);
   const capabilities = useCapabilities();
   const devModeActive = useDevModeStore((state) => state.active);
+  const rightPanel = useUiStore((state) => state.rightPanel);
 
   const [fileMenu, setFileMenu] = useState<{ x: number; y: number } | null>(null);
   const [zoomMenu, setZoomMenu] = useState<{ x: number; y: number } | null>(null);
@@ -272,6 +278,27 @@ export function Toolbar() {
             onClick={() => toggleDevMode()}
           >
             <FileCode2 size={15} />
+          </IconButton>
+        </div>
+
+        <div className="toolbar-group">
+          <IconButton
+            label={en.toolbar.ai}
+            title={capabilities.ai === true ? en.toolbar.aiHint : en.toasts.capabilityUnavailable}
+            active={rightPanel === "ai"}
+            disabled={!ready || capabilities.ai !== true}
+            onClick={() => toggleAiPanel()}
+          >
+            <Sparkles size={15} />
+          </IconButton>
+          <IconButton
+            label={en.toolbar.plugins}
+            title={capabilities.plugins === true ? en.toolbar.pluginsHint : en.toasts.capabilityUnavailable}
+            active={rightPanel === "plugins"}
+            disabled={!ready || capabilities.plugins !== true}
+            onClick={() => togglePluginsPanel()}
+          >
+            <Puzzle size={15} />
           </IconButton>
         </div>
 

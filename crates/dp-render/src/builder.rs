@@ -11,13 +11,13 @@ use std::sync::Arc;
 use dp_geom::{FillRule as GeomFillRule, Mat2D, Point, Rect, Size, VectorPath};
 use dp_layout::LayoutMap;
 use dp_model::{
-    Color, ComponentRole, Document, Fill, FillRule, Node, NodeId, NodeKind, NodeStyle, Page, PageId,
-    Paint, Stroke, StrokeAlign, TextContent, TextStyle,
+    Color, ComponentRole, Document, Fill, FillRule, Node, NodeId, NodeKind, NodeStyle, Page,
+    PageId, Paint, Stroke, StrokeAlign, TextContent, TextStyle,
 };
 use dp_text::TextEngine;
 
 use crate::scene::{
-    DisplayList, SceneFill, SceneItem, ScenePaint, SceneShape, SceneShadow, SceneStop, SceneStroke,
+    DisplayList, SceneFill, SceneItem, ScenePaint, SceneShadow, SceneShape, SceneStop, SceneStroke,
     SceneText,
 };
 
@@ -206,8 +206,9 @@ impl Builder<'_> {
             return false;
         };
         let Some((master_page, master)) = self.document.locate_node(meta.node_id) else {
-            self.list
-                .warn("component instance references a missing master node; drawing its box instead");
+            self.list.warn(
+                "component instance references a missing master node; drawing its box instead",
+            );
             return false;
         };
         if master_page.id != self.page.id {
@@ -312,12 +313,7 @@ impl Builder<'_> {
             result = Some(match result {
                 None => path,
                 Some(accumulated) => {
-                    match dp_geom::boolean_op(
-                        &accumulated,
-                        &path,
-                        operation,
-                        geometry_rule,
-                    ) {
+                    match dp_geom::boolean_op(&accumulated, &path, operation, geometry_rule) {
                         Ok(combined) => combined,
                         Err(_) => {
                             self.list.warn(

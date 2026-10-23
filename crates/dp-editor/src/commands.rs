@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use dp_geom::BooleanOp;
 use dp_model::ops::{Align, DistributeAxis};
 use dp_model::{
-    Color, CollectionId, ComponentId, Edit, ModeId, ModelError, Node, NodeId, NodeKind, NodePatch,
+    CollectionId, Color, ComponentId, Edit, ModeId, ModelError, Node, NodeId, NodeKind, NodePatch,
     Page, PageId, StyleId, Transaction, Transform, VariableId, VariableValue,
 };
 use serde::{Deserialize, Serialize};
@@ -89,7 +89,10 @@ impl EditorState {
                 let ids = pid_list(args, "ids")?.ok_or_else(|| {
                     EditorError::InvalidArguments("select_nodes requires ids".to_owned())
                 })?;
-                let additive = args.get("additive").and_then(Value::as_bool).unwrap_or(false);
+                let additive = args
+                    .get("additive")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
                 if additive {
                     for id in ids {
                         self.select(id, true);
@@ -100,10 +103,9 @@ impl EditorState {
                 Ok(false)
             }
             "set_tool" => {
-                let tool_value = args
-                    .get("tool")
-                    .cloned()
-                    .ok_or_else(|| EditorError::InvalidArguments("set_tool requires tool".to_owned()))?;
+                let tool_value = args.get("tool").cloned().ok_or_else(|| {
+                    EditorError::InvalidArguments("set_tool requires tool".to_owned())
+                })?;
                 let tool: ToolId = serde_json::from_value(tool_value)
                     .map_err(|error| EditorError::InvalidArguments(error.to_string()))?;
                 self.set_tool(tool);
@@ -162,15 +164,27 @@ impl EditorState {
             }
             "toggle_visible" => {
                 let ids = resolve_ids(self, args)?;
-                toggle_flag(self, &ids, |node| !node.visible, |patch, value| {
-                    patch.visible = Some(value);
-                }, "Toggle visibility")
+                toggle_flag(
+                    self,
+                    &ids,
+                    |node| !node.visible,
+                    |patch, value| {
+                        patch.visible = Some(value);
+                    },
+                    "Toggle visibility",
+                )
             }
             "toggle_locked" => {
                 let ids = resolve_ids(self, args)?;
-                toggle_flag(self, &ids, |node| !node.locked, |patch, value| {
-                    patch.locked = Some(value);
-                }, "Toggle lock")
+                toggle_flag(
+                    self,
+                    &ids,
+                    |node| !node.locked,
+                    |patch, value| {
+                        patch.locked = Some(value);
+                    },
+                    "Toggle lock",
+                )
             }
             "set_opacity" => {
                 let ids = resolve_ids(self, args)?;
@@ -196,7 +210,7 @@ impl EditorState {
                     other => {
                         return Err(EditorError::InvalidArguments(format!(
                             "unknown distribute axis {other}"
-                        )))
+                        )));
                     }
                 };
                 let spacing = args.get("spacing").and_then(Value::as_f64).unwrap_or(0.0);
@@ -212,7 +226,7 @@ impl EditorState {
                     other => {
                         return Err(EditorError::InvalidArguments(format!(
                             "unknown boolean op {other}"
-                        )))
+                        )));
                     }
                 };
                 boolean_selection(self, &ids, op)
@@ -259,7 +273,8 @@ impl EditorState {
                     .get("index")
                     .and_then(Value::as_u64)
                     .map(|value| value as usize);
-                let transaction = dp_model::ops::reorder(&self.document, id, parent, index, "Reorder")?;
+                let transaction =
+                    dp_model::ops::reorder(&self.document, id, parent, index, "Reorder")?;
                 self.apply(transaction)?;
                 Ok(true)
             }
@@ -354,10 +369,9 @@ impl EditorState {
                         "apply_patch requires selected nodes or ids".to_owned(),
                     ));
                 }
-                let patch_value = args
-                    .get("patch")
-                    .cloned()
-                    .ok_or_else(|| EditorError::InvalidArguments("apply_patch requires patch".to_owned()))?;
+                let patch_value = args.get("patch").cloned().ok_or_else(|| {
+                    EditorError::InvalidArguments("apply_patch requires patch".to_owned())
+                })?;
                 let patch: NodePatch = serde_json::from_value(patch_value)
                     .map_err(|error| EditorError::InvalidArguments(error.to_string()))?;
                 let label = args
@@ -366,7 +380,8 @@ impl EditorState {
                     .unwrap_or("Edit")
                     .to_owned();
                 let coalesce = args.get("coalesce_key").and_then(Value::as_str);
-                let transaction = dp_model::ops::patch_nodes(&self.document, &ids, patch, label, coalesce)?;
+                let transaction =
+                    dp_model::ops::patch_nodes(&self.document, &ids, patch, label, coalesce)?;
                 self.apply(transaction)?;
                 Ok(true)
             }
@@ -398,7 +413,10 @@ impl EditorState {
                 Ok(false)
             }
             "create_component" => {
-                let name = args.get("name").and_then(Value::as_str).unwrap_or("Component");
+                let name = args
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or("Component");
                 let ids = top_level_selection(self);
                 if ids.is_empty() {
                     return Err(EditorError::InvalidArguments(
@@ -456,7 +474,9 @@ impl EditorState {
             "create_style_from_node" => {
                 let ids = resolve_ids(self, args)?;
                 let id = ids.first().copied().ok_or_else(|| {
-                    EditorError::InvalidArguments("select a layer to create a style from".to_owned())
+                    EditorError::InvalidArguments(
+                        "select a layer to create a style from".to_owned(),
+                    )
                 })?;
                 let name = args.get("name").and_then(Value::as_str).unwrap_or("Style");
                 let transaction = dp_model::create_style_from_node(&self.document, id, name)?;
@@ -562,16 +582,12 @@ impl EditorState {
                 self.apply(transaction)?;
                 Ok(true)
             }
-            "create_component_set" | "swap_instance" => {
-                Err(EditorError::Unsupported(format!(
-                    "{name} is not implemented in this build yet"
-                )))
-            }
-            "mask_with_selection" | "flatten" | "outline_stroke" => {
-                Err(EditorError::Unsupported(format!(
-                    "{name} is not implemented in this build yet"
-                )))
-            }
+            "create_component_set" | "swap_instance" => Err(EditorError::Unsupported(format!(
+                "{name} is not implemented in this build yet"
+            ))),
+            "mask_with_selection" | "flatten" | "outline_stroke" => Err(EditorError::Unsupported(
+                format!("{name} is not implemented in this build yet"),
+            )),
             "play" => {
                 self.prototype_play(None)?;
                 Ok(false)
@@ -593,8 +609,8 @@ impl EditorState {
                 })?;
                 let trigger: dp_model::prototype::Trigger = serde_json::from_value(trigger_value)
                     .map_err(|error| {
-                        EditorError::InvalidArguments(format!("invalid trigger: {error}"))
-                    })?;
+                    EditorError::InvalidArguments(format!("invalid trigger: {error}"))
+                })?;
                 let actions_value = args
                     .get("actions")
                     .or_else(|| args.get("action"))
@@ -686,19 +702,17 @@ impl EditorState {
             }
             "plugin_set_enabled" => {
                 let plugin_id: String = json_field(args, "plugin_id")?;
-                let enabled = args
-                    .get("enabled")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(true);
+                let enabled = args.get("enabled").and_then(Value::as_bool).unwrap_or(true);
                 self.plugin_set_enabled(&plugin_id, enabled)?;
                 Ok(true)
             }
             "plugin_set_setting" => {
                 let plugin_id: String = json_field(args, "plugin_id")?;
                 let key: String = json_field(args, "key")?;
-                let value = args.get("value").cloned().ok_or_else(|| {
-                    EditorError::InvalidArguments("missing 'value'".to_owned())
-                })?;
+                let value = args
+                    .get("value")
+                    .cloned()
+                    .ok_or_else(|| EditorError::InvalidArguments("missing 'value'".to_owned()))?;
                 self.plugin_set_setting(&plugin_id, &key, value)?;
                 Ok(true)
             }
@@ -1178,10 +1192,7 @@ fn parse_caret_selection(args: &Value) -> Result<Option<(usize, usize)>, EditorE
     Ok(Some((pair[0].min(pair[1]), pair[0].max(pair[1]))))
 }
 
-fn json_field<T: serde::de::DeserializeOwned>(
-    args: &Value,
-    key: &str,
-) -> Result<T, EditorError> {
+fn json_field<T: serde::de::DeserializeOwned>(args: &Value, key: &str) -> Result<T, EditorError> {
     let value = args
         .get(key)
         .cloned()
@@ -1215,19 +1226,14 @@ fn parse_variable_value(args: &Value) -> Result<VariableValue, EditorError> {
             value: text.to_owned(),
         });
     }
-    let kind = raw
-        .get("kind")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
+    let kind = raw.get("kind").and_then(Value::as_str).unwrap_or_default();
     match kind {
         "color" => {
-            let hex = raw
-                .get("hex")
-                .and_then(Value::as_str)
-                .ok_or_else(|| EditorError::InvalidArguments("color needs a hex string".to_owned()))?;
-            let color = Color::from_hex(hex).ok_or_else(|| {
-                EditorError::InvalidArguments(format!("invalid colour {hex}"))
+            let hex = raw.get("hex").and_then(Value::as_str).ok_or_else(|| {
+                EditorError::InvalidArguments("color needs a hex string".to_owned())
             })?;
+            let color = Color::from_hex(hex)
+                .ok_or_else(|| EditorError::InvalidArguments(format!("invalid colour {hex}")))?;
             Ok(VariableValue::Color { color })
         }
         "float" => Ok(VariableValue::Float {

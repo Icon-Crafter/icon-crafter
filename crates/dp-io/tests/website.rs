@@ -57,7 +57,7 @@ fn document() -> Document {
             }],
         }],
     });
-    let mut page = document.page_mut(page_id).expect("page");
+    let page = document.page_mut(page_id).expect("page");
     page.remove_node(card_id);
     page.insert_node(card_copy, Some(hero_id), None).unwrap();
     document
@@ -74,7 +74,10 @@ fn exports_sections_text_shapes_and_css() {
         .expect("website export");
     assert!(bundle.html.starts_with("<!DOCTYPE html>"));
     assert!(bundle.html.contains("<section"));
-    assert!(bundle.html.contains("Hello Icon Crafter"), "text must be real text");
+    assert!(
+        bundle.html.contains("Hello Icon Crafter"),
+        "text must be real text"
+    );
     assert!(bundle.html.contains("Hero"));
     assert!(
         bundle.css.contains("width: 640px"),

@@ -26,6 +26,7 @@
 import type {
   ActionJson,
   AddAnnotationArgs,
+  AiTextTask,
   Annotation,
   AnnotationKind,
   ApplyPatchArgs,
@@ -74,6 +75,8 @@ import type {
   Rect,
   RevisionDiff,
   SaveResult,
+  SnapshotAiPreview,
+  SnapshotPlugin,
   Stroke,
   TextContent,
   ToolId,
@@ -294,6 +297,77 @@ interface HistorySnapshot {
   selection: string[];
 }
 
+/** One step in a simulated AI layout proposal. */
+interface DevAiStep {
+  kind: "frame" | "rectangle" | "ellipse" | "text" | "delete";
+  label: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color?: Color;
+  characters?: string;
+  targetId?: string;
+}
+
+interface DevAiProposal {
+  prompt: string;
+  title: string;
+  width: number;
+  height: number;
+  steps: DevAiStep[];
+  destructive: boolean;
+}
+
+/** Setting declaration accepted in a simulated plugin manifest. */
+interface DevPluginSettingSchema {
+  type: "string" | "number" | "boolean" | "select";
+  default?: unknown;
+  label?: string;
+  description?: string;
+  options?: string[];
+}
+
+function isSettingSchema(value: unknown): value is DevPluginSettingSchema {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const schema = value as Record<string, unknown>;
+  return (
+    schema.type === "string" ||
+    schema.type === "number" ||
+    schema.type === "boolean" ||
+    schema.type === "select"
+  );
+}
+
+function defaultForSetting(schema: DevPluginSettingSchema): unknown {
+  switch (schema.type) {
+    case "string":
+      return "";
+    case "number":
+      return 0;
+    case "boolean":
+      return false;
+    case "select":
+      return schema.options?.[0] ?? "";
+  }
+}
+
+/** Returns a human-readable problem, or null when the value fits the schema. */
+function validateSettingValue(schema: DevPluginSettingSchema, value: unknown): string | null {
+  switch (schema.type) {
+    case "string":
+      return typeof value === "string" ? null : "expected a string.";
+    case "number":
+      return typeof value === "number" && Number.isFinite(value) ? null : "expected a finite number.";
+    case "boolean":
+      return typeof value === "boolean" ? null : "expected true or false.";
+    case "select": {
+      if (typeof value !== "string") return "expected one of the declared options.";
+      return schema.options?.includes(value) ? null : `expected one of: ${(schema.options ?? []).join(", ")}.`;
+    }
+  }
+}
+
 const FILE_STORAGE_PREFIX = "iconcrafter.dev.files.v1:";
 
 function makeTextContent(characters: string, size = 16, color: Color = INK): TextContent {
@@ -362,6 +436,9 @@ export class DevTransport implements EngineTransport {
   private paintStyleData = new Map<string, Fill>();
   private textStyleData = new Map<string, TextContent["style"]>();
   private effectStyleData = new Map<string, Effect[]>();
+  private aiPreview: SnapshotAiPreview | null = null;
+  private aiProposal: DevAiProposal | null = null;
+  private plugins: SnapshotPlugin[] = [];
 
   constructor() {
     this.doc = this.buildDemoDocument();
@@ -1245,8 +1322,8 @@ export class DevTransport implements EngineTransport {
       recent_files: [...this.recentFiles],
       preferences: { ...this.preferences },
       capabilities: {
-        ai: false,
-        plugins: false,
+        ai: true,
+        plugins: true,
         collab: false,
         gpu: false,
         dev_mode: true,
@@ -1524,6 +1601,8 @@ export class DevTransport implements EngineTransport {
         .map((node) => this.detailOf(node)),
       text_edit: this.buildTextEditState(),
       prototype: this.presentationState(),
+      ai_preview: this.aiPreview ? deepClone(this.aiPreview) : null,
+      plugins: deepClone(this.plugins),
       errors: [...this.errors],
       status: this.status,
     };
@@ -4155,6 +4234,470 @@ export class DevTransport implements EngineTransport {
   prototypeBack(): Promise<EngineState> {
     if (!this.presentation) return Promise.resolve(this.finish());
     this.goBackPresentation();
+    return Promise.resolve(this.finish());
+  }
+
+  // -- AI (offline deterministic provider) ---------------------------------
+
+  private aiDimensions(
+    prompt: string,
+    widthInput?: number,
+    heightInput?: number,
+  ): { width: number; height: number } {
+    const clean = (value: number | undefined): number | null =>
+      typeof value === "number" && Number.isFinite(value) ? clamp(Math.round(value), 64, 20000) : null;
+    const explicitWidth = clean(widthInput);
+    const explicitHeight = clean(heightInput);
+    if (explicitWidth && explicitHeight) return { width: explicitWidth, height: explicitHeight };
+    const match = /(\d{3,4})\s*(?:x|×|by)\s*(\d{3,4})/i.exec(prompt);
+    if (match) {
+      const width = Number(match[1]);
+      const height = Number(match[2]);
+      if (Number.isFinite(width) && Number.isFinite(height)) {
+        return { width: clamp(width, 64, 20000), height: clamp(height, 64, 20000) };
+      }
+    }
+    if (/\bmobile|phone|iphone\b/i.test(prompt)) return { width: 390, height: 844 };
+    if (/\btablet|ipad\b/i.test(prompt)) return { width: 834, height: 1112 };
+    return { width: 1440, height: 900 };
+  }
+
+  private aiTitle(prompt: string): string {
+    const words = prompt
+      .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+      .trim()
+      .split(/\s+/)
+      .slice(0, 4);
+    const title = words
+      .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : word))
+      .join(" ")
+      .trim();
+    return (title === "" ? "Untitled layout" : title).slice(0, 44);
+  }
+
+  private aiOrigin(width: number, height: number): { x: number; y: number } {
+    const zoom = Math.max(this.viewport.zoom, 0.01);
+    const worldWidth = this.viewport.width > 0 ? this.viewport.width / zoom : 1280;
+    const worldHeight = this.viewport.height > 0 ? this.viewport.height / zoom : 800;
+    return {
+      x: this.viewport.x + (worldWidth - width) / 2,
+      y: this.viewport.y + (worldHeight - height) / 2,
+    };
+  }
+
+  private buildAiProposal(prompt: string, width?: number, height?: number): DevAiProposal | null {
+    const description = prompt.trim();
+    if (description === "") {
+      this.recordError("validation", "Describe the layout you want first.");
+      return null;
+    }
+    const size = this.aiDimensions(description, width, height);
+    const title = this.aiTitle(description);
+    const origin = this.aiOrigin(size.width, size.height);
+    const pad = 64;
+    const destructive = /\b(delete|remove|replace|erase)\b/i.test(description);
+
+    const steps: DevAiStep[] = [];
+    if (destructive) {
+      const target =
+        this.node(this.selection[0] ?? "") ??
+        this.orderedNodes().find((node) => node.kind === "frame") ??
+        this.orderedNodes()[0] ??
+        null;
+      if (target) {
+        const bounds = this.nodeBounds(target);
+        steps.push({
+          kind: "delete",
+          label: `Delete existing layer «${target.name}» — this needs confirmation`,
+          x: bounds.x,
+          y: bounds.y,
+          w: bounds.w,
+          h: bounds.h,
+          targetId: target.id,
+        });
+      }
+    }
+
+    steps.push({
+      kind: "frame",
+      label: `Create frame «${title}» — ${size.width}×${size.height}`,
+      x: origin.x,
+      y: origin.y,
+      w: size.width,
+      h: size.height,
+      color: WHITE,
+    });
+    steps.push({
+      kind: "text",
+      label: `Add heading «${title}»`,
+      x: origin.x + pad,
+      y: origin.y + pad,
+      w: Math.max(size.width - pad * 2, 160),
+      h: 92,
+      characters: title,
+      color: GRAPHITE,
+    });
+    steps.push({
+      kind: "text",
+      label: "Add supporting copy",
+      x: origin.x + pad,
+      y: origin.y + pad + 112,
+      w: Math.max(Math.round(size.width * 0.55), 160),
+      h: 76,
+      characters: `A ${title.toLowerCase()} layout generated from your prompt.`,
+      color: { r: 0.28, g: 0.31, b: 0.36, a: 1 },
+    });
+    steps.push({
+      kind: "rectangle",
+      label: "Add primary action button",
+      x: origin.x + pad,
+      y: origin.y + size.height - pad - 52,
+      w: 184,
+      h: 52,
+      color: CORAL,
+    });
+    steps.push({
+      kind: "ellipse",
+      label: "Add decorative accent",
+      x: origin.x + size.width - pad - 144,
+      y: origin.y + pad,
+      w: 144,
+      h: 144,
+      color: TEAL,
+    });
+
+    return { prompt: description, title, width: size.width, height: size.height, steps, destructive };
+  }
+
+  private setAiPreview(proposal: DevAiProposal): void {
+    const warnings = ["Offline deterministic provider — no model was called.", "Review every step before applying."];
+    if (proposal.destructive) warnings.push("This proposal deletes existing content and needs confirmation.");
+    this.aiPreview = {
+      source: "offline",
+      summary: proposal.steps.map((step) => step.label),
+      warnings,
+      requires_confirmation: proposal.destructive,
+      steps: proposal.steps.length,
+    };
+  }
+
+  private removeNodeSubtrees(ids: string[]): void {
+    if (!this.doc) return;
+    const all = new Set<string>();
+    for (const id of ids) for (const child of this.subtreeIds(id)) all.add(child);
+    for (const id of all) {
+      const node = this.doc.nodes.get(id);
+      if (!node) continue;
+      if (node.parent) {
+        const parent = this.doc.nodes.get(node.parent);
+        if (parent) parent.children = parent.children.filter((child) => child !== id);
+      } else {
+        const page = this.doc.pages.find((candidate) => candidate.id === node.page);
+        if (page) page.roots = page.roots.filter((root) => root !== id);
+      }
+      this.doc.nodes.delete(id);
+    }
+    this.selection = this.selection.filter((id) => this.doc?.nodes.has(id));
+  }
+
+  private applyAiProposal(proposal: DevAiProposal): void {
+    this.pushHistory();
+    let frameId: string | null = null;
+    for (const step of proposal.steps) {
+      if (step.kind === "delete") {
+        if (step.targetId) this.removeNodeSubtrees([step.targetId]);
+        continue;
+      }
+      const node = this.createNode({
+        name:
+          step.kind === "frame"
+            ? proposal.title
+            : step.kind === "text"
+              ? step.characters?.slice(0, 40) || "AI text"
+              : step.kind === "ellipse"
+                ? "AI accent"
+                : "AI rectangle",
+        kind: step.kind === "frame" ? "frame" : step.kind === "text" ? "text" : step.kind === "ellipse" ? "ellipse" : "rectangle",
+        rect: { x: step.x, y: step.y, w: step.w, h: step.h },
+        page: this.doc?.activePage ?? "",
+        parent: step.kind === "frame" ? null : frameId,
+        fills: step.kind === "text" || step.color === undefined ? [] : [makeFill(step.color)],
+        text:
+          step.kind === "text" && step.characters
+            ? makeTextContent(step.characters, step.kind === "text" && step.h > 80 ? 40 : 17, step.color ?? GRAPHITE)
+            : null,
+        cornerRadii: defaultCornerRadii(step.kind === "rectangle" ? 10 : 0),
+      });
+      this.insertNode(node, step.kind === "frame" ? null : frameId);
+      if (step.kind === "frame") frameId = node.id;
+    }
+    this.selection = frameId ? [frameId] : [];
+    this.aiProposal = null;
+    this.aiPreview = null;
+    this.markMutated();
+    this.status = `Applied AI proposal (${proposal.steps.length} steps) — undo restores the previous layout.`;
+  }
+
+  private aiRenameTargets(): DevNode[] {
+    const selected = this.selection
+      .map((id) => this.node(id))
+      .filter((node): node is DevNode => node !== null);
+    return selected.length > 0 ? selected : this.orderedNodes().slice(0, 100);
+  }
+
+  private suggestedLayerName(node: DevNode, index: number): string {
+    if (node.kind === "text" && node.text) {
+      const words = node.text.characters.trim().split(/\s+/).slice(0, 3);
+      if (words.length > 0) return words.join(" ").replace(/[.,;:!?]+$/, "");
+    }
+    const label = node.kind === "frame" ? "Frame" : node.kind === "group" ? "Group" : node.kind === "ellipse" ? "Ellipse" : node.kind === "component" ? "Component" : "Layer";
+    return `${label} ${index + 1}`;
+  }
+
+  private aiTextResult(task: AiTextTask, input: string): string {
+    const normalized = input.replace(/\s+/g, " ").trim();
+    const sentence = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+    const pageName = this.activePage()?.name ?? "this page";
+    switch (task) {
+      case "improve":
+        return `${sentence.replace(/[.!?]+$/, "")}. Tighten the wording, keep the main action first, and remove filler.`;
+      case "explain":
+        return `${sentence} — it appears in «${pageName}». Treat it as supporting context for the primary action above it.`;
+      case "content":
+        return `${sentence} Alternative: "Start with the outcome, then explain the detail."`;
+      case "style":
+        return `${sentence} Style notes: use the 8px spacing scale, one type-size step per level, and the brand accent only for the primary action.`;
+      case "comments":
+        return `${sentence} Suggested review comment: confirm spacing and contrast against the design system before handoff.`;
+    }
+  }
+
+  aiGenerateLayout(args: { prompt: string; width?: number; height?: number }): Promise<EngineState> {
+    if (!this.doc) return Promise.resolve(this.fail("validation", "No document is open."));
+    const proposal = this.buildAiProposal(args.prompt, args.width, args.height);
+    if (!proposal) return Promise.resolve(this.finish());
+    this.aiProposal = proposal;
+    this.setAiPreview(proposal);
+    this.status = `AI proposal ready (${proposal.steps.length} steps) — review before applying.`;
+    return Promise.resolve(this.finish());
+  }
+
+  aiApplyLast(args: { confirmed?: boolean } = {}): Promise<EngineState> {
+    if (!this.doc) return Promise.resolve(this.fail("validation", "No document is open."));
+    const proposal = this.aiProposal;
+    if (!proposal) return Promise.resolve(this.fail("validation", "There is no pending AI proposal to apply."));
+    if (proposal.destructive && args.confirmed !== true) {
+      return Promise.resolve(
+        this.fail("validation", "This proposal deletes existing layers; confirm before applying."),
+      );
+    }
+    this.applyAiProposal(proposal);
+    return Promise.resolve(this.finish());
+  }
+
+  aiDiscardLast(): Promise<EngineState> {
+    if (!this.aiProposal && !this.aiPreview) {
+      return Promise.resolve(this.fail("validation", "There is no pending AI proposal."));
+    }
+    this.aiProposal = null;
+    this.aiPreview = null;
+    this.status = "AI proposal discarded.";
+    return Promise.resolve(this.finish());
+  }
+
+  aiRenameLayers(): Promise<EngineState> {
+    if (!this.doc) return Promise.resolve(this.fail("validation", "No document is open."));
+    const targets = this.aiRenameTargets();
+    if (targets.length === 0) {
+      return Promise.resolve(this.fail("validation", "Select a layer or add layers to a page first."));
+    }
+    this.pushHistory();
+    targets.forEach((node, index) => {
+      node.name = this.suggestedLayerName(node, index);
+    });
+    this.markMutated();
+    this.status = `Renamed ${targets.length} layer${targets.length === 1 ? "" : "s"} with contextual names.`;
+    return Promise.resolve(this.finish());
+  }
+
+  aiTextTask(args: { task: AiTextTask; input: string }): Promise<EngineState> {
+    const tasks: AiTextTask[] = ["improve", "explain", "content", "style", "comments"];
+    if (!tasks.includes(args.task)) {
+      return Promise.resolve(this.fail("validation", `Unknown text task «${String(args.task)}».`));
+    }
+    const input = args.input.trim();
+    if (input === "") return Promise.resolve(this.fail("validation", "Enter some text for the AI task."));
+    this.aiPreview = null;
+    this.status = this.aiTextResult(args.task, input);
+    return Promise.resolve(this.finish());
+  }
+
+  // -- Plugins --------------------------------------------------------------
+
+  private findPlugin(id: string): SnapshotPlugin | undefined {
+    return this.plugins.find((plugin) => plugin.id === id);
+  }
+
+  private parsePluginManifest(
+    raw: Record<string, unknown> | string,
+  ): { plugin: SnapshotPlugin } | { error: string } {
+    let value: unknown = raw;
+    if (typeof raw === "string") {
+      if (raw.trim() === "") return { error: "Paste a plugin manifest JSON object first." };
+      try {
+        value = JSON.parse(raw);
+      } catch (error) {
+        return { error: `Manifest is not valid JSON: ${error instanceof Error ? error.message : String(error)}` };
+      }
+    }
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      return { error: "Manifest must be a JSON object." };
+    }
+    const manifest = value as Record<string, unknown>;
+    const id = manifest.id;
+    if (typeof id !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(id)) {
+      return { error: 'Manifest "id" must be lowercase kebab-case (for example "hello-icon-crafter").' };
+    }
+    const name = manifest.name;
+    if (typeof name !== "string" || name.trim() === "") return { error: 'Manifest "name" is required.' };
+    const version = manifest.version;
+    if (typeof version !== "string" || version.trim() === "") return { error: 'Manifest "version" is required.' };
+    const description = typeof manifest.description === "string" ? manifest.description : "";
+    const permissions = manifest.permissions;
+    if (permissions !== undefined) {
+      if (!Array.isArray(permissions) || permissions.some((entry) => typeof entry !== "string")) {
+        return { error: 'Manifest "permissions" must be an array of strings.' };
+      }
+    }
+    const commands = manifest.commands;
+    if (commands !== undefined) {
+      if (!Array.isArray(commands) || commands.some((entry) => typeof entry !== "string")) {
+        return { error: 'Manifest "commands" must be an array of strings.' };
+      }
+    }
+    const panels = manifest.panels;
+    if (panels !== undefined) {
+      if (
+        !Array.isArray(panels) ||
+        panels.some(
+          (panel) =>
+            typeof panel !== "object" ||
+            panel === null ||
+            typeof (panel as Record<string, unknown>).id !== "string",
+        )
+      ) {
+        return { error: 'Manifest "panels" must be an array of { id, title } objects.' };
+      }
+    }
+    const settings: Record<string, unknown> = {};
+    const settingsRaw = manifest.settings;
+    if (settingsRaw !== undefined) {
+      if (typeof settingsRaw !== "object" || settingsRaw === null || Array.isArray(settingsRaw)) {
+        return { error: 'Manifest "settings" must be an object keyed by setting name.' };
+      }
+      for (const [key, schema] of Object.entries(settingsRaw as Record<string, unknown>)) {
+        if (!isSettingSchema(schema)) {
+          return { error: `Setting "${key}" must declare a type of string, number, boolean or select.` };
+        }
+        if (schema.type === "select") {
+          if (!Array.isArray(schema.options) || schema.options.some((option) => typeof option !== "string")) {
+            return { error: `Setting "${key}" is a select and must declare string options.` };
+          }
+        } else if (schema.options !== undefined) {
+          return { error: `Setting "${key}" can only declare options when its type is select.` };
+        }
+        if (schema.default !== undefined) {
+          const problem = validateSettingValue(schema, schema.default);
+          if (problem) return { error: `Setting "${key}" default is invalid: ${problem}` };
+        }
+        settings[key] = schema.default ?? defaultForSetting(schema);
+      }
+    }
+    const plugin: SnapshotPlugin = {
+      id,
+      name: name.trim(),
+      version: version.trim(),
+      description,
+      enabled: false,
+      state: "disabled",
+      last_error: null,
+      settings,
+      manifest: deepClone(manifest),
+    };
+    return { plugin };
+  }
+
+  private applyPluginState(plugin: SnapshotPlugin): void {
+    plugin.state = plugin.last_error ? "error" : plugin.enabled ? "enabled" : "disabled";
+  }
+
+  pluginInstall(args: { manifest: Record<string, unknown> | string }): Promise<EngineState> {
+    const parsed = this.parsePluginManifest(args.manifest);
+    if ("error" in parsed) return Promise.resolve(this.fail("validation", parsed.error));
+    if (this.findPlugin(parsed.plugin.id)) {
+      return Promise.resolve(
+        this.fail("validation", `Plugin «${parsed.plugin.id}» is already installed.`),
+      );
+    }
+    this.plugins.push(parsed.plugin);
+    this.applyPluginState(parsed.plugin);
+    this.status = `Installed plugin «${parsed.plugin.name}».`;
+    return Promise.resolve(this.finish());
+  }
+
+  pluginInstallExample(): Promise<EngineState> {
+    const example: Record<string, unknown> = {
+      id: "hello-icon-crafter",
+      name: "Hello Icon Crafter",
+      version: "0.1.0",
+      description: "A minimal example plugin that greets the document and shows a panel.",
+      permissions: ["document.read"],
+      commands: ["hello-icon-crafter.greet", "hello-icon-crafter.rename-layer"],
+      panels: [{ id: "hello-icon-crafter.panel", title: "Hello" }],
+      settings: {
+        greeting: { type: "string", default: "Hello from a plugin", label: "Greeting" },
+        uppercase: { type: "boolean", default: false, label: "Uppercase output" },
+      },
+    };
+    return this.pluginInstall({ manifest: example });
+  }
+
+  pluginRemove(pluginId: string): Promise<EngineState> {
+    const plugin = this.findPlugin(pluginId);
+    if (!plugin) return Promise.resolve(this.fail("validation", `Plugin «${pluginId}» is not installed.`));
+    this.plugins = this.plugins.filter((entry) => entry.id !== pluginId);
+    this.status = `Removed plugin «${plugin.name}».`;
+    return Promise.resolve(this.finish());
+  }
+
+  pluginSetEnabled(pluginId: string, enabled: boolean): Promise<EngineState> {
+    const plugin = this.findPlugin(pluginId);
+    if (!plugin) return Promise.resolve(this.fail("validation", `Plugin «${pluginId}» is not installed.`));
+    plugin.enabled = enabled;
+    this.applyPluginState(plugin);
+    this.status = `${enabled ? "Enabled" : "Disabled"} plugin «${plugin.name}».`;
+    return Promise.resolve(this.finish());
+  }
+
+  pluginSetSetting(pluginId: string, key: string, value: unknown): Promise<EngineState> {
+    const plugin = this.findPlugin(pluginId);
+    if (!plugin) return Promise.resolve(this.fail("validation", `Plugin «${pluginId}» is not installed.`));
+    const settingsManifest = plugin.manifest.settings;
+    const schema =
+      typeof settingsManifest === "object" && settingsManifest !== null && !Array.isArray(settingsManifest)
+        ? (settingsManifest as Record<string, unknown>)[key]
+        : undefined;
+    if (!isSettingSchema(schema)) {
+      return Promise.resolve(
+        this.fail("validation", `Plugin «${plugin.name}» does not declare a setting named «${key}».`),
+      );
+    }
+    const problem = validateSettingValue(schema, value);
+    if (problem) {
+      return Promise.resolve(this.fail("validation", `Invalid value for «${key}»: ${problem}`));
+    }
+    plugin.settings[key] = deepClone(value);
+    this.status = `Updated «${key}» for plugin «${plugin.name}».`;
     return Promise.resolve(this.finish());
   }
 

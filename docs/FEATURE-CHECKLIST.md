@@ -164,7 +164,7 @@ Last updated: session 15 (plugins + AI subsystems implemented with op-scoped san
 
 | # | Feature | Status | Evidence / notes |
 |---|---|---|---|
-| Q1 | Unit + integration tests across crates and server | implemented | engine + desktop IPC: 13 crates, **326 tests** in the last full run (geom 44, model 72, text 13, layout 12, render 20, io 9, persist 13, editor 40, collab 23, prototype 18, devmode 14, ai 19, plugins 23); backend: 132 unit tests green (`cargo test -p iconcrafter-server --offline --lib`); DB/WS integration tests are `#[ignore]` until Docker/Postgres is available |
+| Q1 | Unit + integration tests across crates and server | implemented | engine + desktop IPC: 13 crates, **327 test results** in the last full run (geom 44, model 72, text 13, layout 12, render 20, io 9, persist 13, editor 40, collab 23, prototype 18, devmode 14, ai 19, plugins 23); backend: 132 unit tests green (`cargo test -p iconcrafter-server --offline --lib`); DB/WS integration tests are `#[ignore]` until Docker/Postgres is available |
 | Q2 | Benchmarks for large documents (10k nodes), reported numbers | implemented | `crates/dp-editor/examples/bench_editor.rs` builds 10,500 nodes and measures layout/render/hit-test/serialize/undo; measured numbers and honest gaps in docs/PERFORMANCE.md (render ~47 ms/frame in dev profile is above the 16 ms target — optimization listed next) |
 | Q3 | Dependency audit, secret scan, security review | in progress | no hardcoded secrets (env-based config); backend uses Argon2id/opaque session tokens; `cargo tree -d` duplicates reviewed but no vuln scanner run yet |
 | Q4 | Installers (Windows MSI/NSIS), upgrade path, reproducibility | planned | |

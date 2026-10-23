@@ -11,7 +11,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::permissions::{Permission, API_VERSION};
+use crate::permissions::{API_VERSION, Permission};
 
 /// Supported manifest schema version.
 pub const MANIFEST_VERSION: u32 = 1;
@@ -115,7 +115,8 @@ impl PluginSetting {
     }
 
     fn validate(&self) -> Result<(), ManifestError> {
-        validate_id(self.id(), "setting").map_err(|error| ManifestError::InvalidSetting(error.0))?;
+        validate_id(self.id(), "setting")
+            .map_err(|error| ManifestError::InvalidSetting(error.0))?;
         if self.label().trim().is_empty() {
             return Err(ManifestError::InvalidSetting(format!(
                 "setting '{}' needs a label",
@@ -240,7 +241,9 @@ pub enum ManifestError {
     #[error("invalid version '{0}' (expected MAJOR.MINOR.PATCH)")]
     InvalidVersion(String),
     /// API version mismatch.
-    #[error("plugin uses API version {found}; this host supports {supported} (compatible plugins are rejected loudly)")]
+    #[error(
+        "plugin uses API version {found}; this host supports {supported} (compatible plugins are rejected loudly)"
+    )]
     UnsupportedApi {
         /// Version declared by the plugin.
         found: u32,
@@ -289,7 +292,9 @@ impl PluginManifest {
         }
         validate_id(&self.id, "plugin id").map_err(|error| ManifestError::InvalidId(error.0))?;
         if self.name.trim().is_empty() || self.name.len() > 80 {
-            return Err(ManifestError::InvalidId("plugin name is empty or too long".to_owned()));
+            return Err(ManifestError::InvalidId(
+                "plugin name is empty or too long".to_owned(),
+            ));
         }
         validate_semver(&self.version)?;
         if self.api_version != API_VERSION {
@@ -303,7 +308,8 @@ impl PluginManifest {
         }
         let mut command_ids = HashSet::new();
         for command in &self.commands {
-            validate_id(&command.id, "command").map_err(|error| ManifestError::InvalidId(error.0))?;
+            validate_id(&command.id, "command")
+                .map_err(|error| ManifestError::InvalidId(error.0))?;
             if !command_ids.insert(command.id.clone()) {
                 return Err(ManifestError::DuplicateCommand(command.id.clone()));
             }
@@ -384,9 +390,9 @@ struct IdError(String);
 /// Plugin/command/panel/setting ids share one naming rule.
 fn validate_id(value: &str, kind: &str) -> Result<(), IdError> {
     let valid = (3..=64).contains(&value.len())
-        && value
-            .chars()
-            .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-')
+        && value.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
+        })
         && !value.starts_with('-')
         && !value.ends_with('-')
         && !value.contains("--");
@@ -403,9 +409,9 @@ fn validate_semver(version: &str) -> Result<(), ManifestError> {
     let core = version.split(['-', '+']).next().unwrap_or("");
     let parts: Vec<&str> = core.split('.').collect();
     let valid = parts.len() == 3
-        && parts
-            .iter()
-            .all(|part| !part.is_empty() && part.chars().all(|character| character.is_ascii_digit()));
+        && parts.iter().all(|part| {
+            !part.is_empty() && part.chars().all(|character| character.is_ascii_digit())
+        });
     if valid {
         Ok(())
     } else {
@@ -438,7 +444,10 @@ mod tests {
         let manifest = PluginManifest::from_json(valid_json()).expect("valid manifest");
         assert_eq!(manifest.id, "acme-icon-tools");
         assert!(manifest.subscribes(PluginEvent::DocumentChanged));
-        assert_eq!(manifest.command("normalize-icons").unwrap().title, "Normalize icons");
+        assert_eq!(
+            manifest.command("normalize-icons").unwrap().title,
+            "Normalize icons"
+        );
         assert_eq!(
             manifest.setting("snap").unwrap().default_value(),
             Value::Bool(true)
@@ -459,7 +468,10 @@ mod tests {
         let json = valid_json().replace("\"api_version\": 1", "\"api_version\": 7");
         assert!(matches!(
             PluginManifest::from_json(&json),
-            Err(ManifestError::UnsupportedApi { found: 7, supported: 1 })
+            Err(ManifestError::UnsupportedApi {
+                found: 7,
+                supported: 1
+            })
         ));
     }
 
@@ -467,7 +479,10 @@ mod tests {
     fn invalid_ids_are_rejected() {
         for bad in ["UPPER", "a", "bad id", "-lead", "x--y", "trail-"] {
             let json = valid_json().replace("\"acme-icon-tools\"", &format!("\"{bad}\""));
-            assert!(PluginManifest::from_json(&json).is_err(), "{bad} should fail");
+            assert!(
+                PluginManifest::from_json(&json).is_err(),
+                "{bad} should fail"
+            );
         }
     }
 

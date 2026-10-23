@@ -34,8 +34,8 @@ pub use color::Color;
 pub use design_system::{
     apply_style, create_color_variable, create_component, create_effect_style,
     create_float_variable, create_instance, create_paint_style, create_style_from_node,
-    create_text_style, create_variable_collection, delete_style, detach_instance,
-    design_system_counts, rename_style, set_active_mode, set_variable_value, stroke_from_paint,
+    create_text_style, create_variable_collection, delete_style, design_system_counts,
+    detach_instance, rename_style, set_active_mode, set_variable_value, stroke_from_paint,
 };
 pub use document::{
     AssetRegistry, ComponentMeta, ComponentRegistry, ComponentSetMeta, DevicePreset, DocKind,

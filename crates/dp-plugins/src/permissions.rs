@@ -105,7 +105,11 @@ impl Grants {
     /// consent prompt in the UI is responsible for asking the user).
     pub fn from_permissions(permissions: &[Permission]) -> Grants {
         Grants {
-            granted: permissions.iter().map(Permission::key).map(str::to_owned).collect(),
+            granted: permissions
+                .iter()
+                .map(Permission::key)
+                .map(str::to_owned)
+                .collect(),
         }
     }
 
@@ -155,21 +159,27 @@ mod tests {
 
     #[test]
     fn network_permission_is_validated() {
-        assert!(Permission::Network {
-            domains: vec!["api.example.com".to_owned()]
-        }
-        .validate()
-        .is_ok());
+        assert!(
+            Permission::Network {
+                domains: vec!["api.example.com".to_owned()]
+            }
+            .validate()
+            .is_ok()
+        );
         assert!(Permission::Network { domains: vec![] }.validate().is_err());
-        assert!(Permission::Network {
-            domains: vec!["not a domain".to_owned()]
-        }
-        .validate()
-        .is_err());
-        assert!(Permission::Network {
-            domains: vec!["https://example.com".to_owned()]
-        }
-        .validate()
-        .is_err());
+        assert!(
+            Permission::Network {
+                domains: vec!["not a domain".to_owned()]
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(
+            Permission::Network {
+                domains: vec!["https://example.com".to_owned()]
+            }
+            .validate()
+            .is_err()
+        );
     }
 }
