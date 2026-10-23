@@ -32,7 +32,10 @@ impl PageRequest {
     /// hostile or buggy client cannot make the server allocate unbounded pages.
     pub fn resolve(params: PageParams) -> Self {
         let page = params.page.unwrap_or(1).max(1);
-        let limit = params.limit.unwrap_or(DEFAULT_PAGE_LIMIT).clamp(1, MAX_PAGE_LIMIT);
+        let limit = params
+            .limit
+            .unwrap_or(DEFAULT_PAGE_LIMIT)
+            .clamp(1, MAX_PAGE_LIMIT);
         Self {
             page,
             limit,
@@ -53,7 +56,7 @@ impl PageRequest {
         let limit = i64::from(DEFAULT_PAGE_LIMIT).max(1);
         // `total_pages` is only meaningful together with a concrete limit; this
         // helper exists for dashboards that use the default limit.
-        u32::try_from(total.div_ceil(limit)).unwrap_or(u32::MAX)
+        u32::try_from(total.saturating_add(limit - 1) / limit).unwrap_or(u32::MAX)
     }
 
     /// Total number of pages for a concrete limit.
@@ -62,7 +65,7 @@ impl PageRequest {
             return 1;
         }
         let limit = i64::from(limit.max(1));
-        u32::try_from(total.div_ceil(limit)).unwrap_or(u32::MAX)
+        u32::try_from(total.saturating_add(limit - 1) / limit).unwrap_or(u32::MAX)
     }
 }
 
@@ -114,7 +117,7 @@ mod tests {
             page: Some(u32::MAX),
             limit: Some(MAX_PAGE_LIMIT),
         });
-        assert_eq!(page.offset, 429_496_729_600);
+        assert_eq!(page.offset, 858_993_458_800);
     }
 
     #[test]

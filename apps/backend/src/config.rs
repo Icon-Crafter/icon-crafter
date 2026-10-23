@@ -187,7 +187,9 @@ impl Config {
             .collect();
 
         let get = |name: &str| -> Option<&str> {
-            map.get(name).map(String::as_str).filter(|v| !v.trim().is_empty())
+            map.get(name)
+                .map(String::as_str)
+                .filter(|v| !v.trim().is_empty())
         };
 
         let database_url = get("DATABASE_URL")
@@ -240,9 +242,7 @@ impl Config {
         if !(1024..=MAX_UPLOAD_BYTES_CEILING).contains(&max_upload_bytes) {
             return Err(ConfigError::invalid(
                 "MAX_UPLOAD_BYTES",
-                format!(
-                    "must be between 1024 and {MAX_UPLOAD_BYTES_CEILING} bytes (512 MiB)"
-                ),
+                format!("must be between 1024 and {MAX_UPLOAD_BYTES_CEILING} bytes (512 MiB)"),
             ));
         }
 
@@ -291,9 +291,7 @@ impl Config {
             // cookies, plain http (local development) does not.
             None => public_base_url.starts_with("https://"),
         };
-        if cookie_secure == false
-            && session_cookie_name.starts_with("__Host-")
-        {
+        if !cookie_secure && session_cookie_name.starts_with("__Host-") {
             return Err(ConfigError::invalid(
                 "SESSION_COOKIE_NAME",
                 "`__Host-` cookie names require COOKIE_SECURE=true",
@@ -315,14 +313,10 @@ impl Config {
             Some(raw) => LogFormat::parse(raw)?,
         };
 
-        let serve_static_dir = get("SERVE_STATIC_DIR").map(|raw| {
-            let path = PathBuf::from(raw.trim());
-            path
-        });
+        let serve_static_dir = get("SERVE_STATIC_DIR").map(|raw| PathBuf::from(raw.trim()));
 
         let db_max_connections =
-            parse_u32(get("DATABASE_MAX_CONNECTIONS"), "DATABASE_MAX_CONNECTIONS")?
-                .unwrap_or(10);
+            parse_u32(get("DATABASE_MAX_CONNECTIONS"), "DATABASE_MAX_CONNECTIONS")?.unwrap_or(10);
         if !(1..=MAX_DB_CONNECTIONS_CEILING).contains(&db_max_connections) {
             return Err(ConfigError::invalid(
                 "DATABASE_MAX_CONNECTIONS",
@@ -353,7 +347,9 @@ impl Config {
 
 fn parse_s3_config(map: &HashMap<String, String>) -> Result<S3Config, ConfigError> {
     let get = |name: &str| -> Option<&str> {
-        map.get(name).map(String::as_str).filter(|v| !v.trim().is_empty())
+        map.get(name)
+            .map(String::as_str)
+            .filter(|v| !v.trim().is_empty())
     };
 
     let bucket = get("S3_BUCKET")
@@ -566,16 +562,6 @@ fn parse_u32(raw: Option<&str>, var: &'static str) -> Result<Option<u32>, Config
     }
 }
 
-/// Convenience constructor for tests and tools.
-#[cfg(test)]
-pub(crate) fn test_config() -> Config {
-    Config::from_map([
-        ("DATABASE_URL", "postgres://postgres:postgres@127.0.0.1:5432/iconcrafter"),
-        ("COOKIE_SECURE", "false"),
-    ])
-    .expect("test configuration is valid")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -598,7 +584,10 @@ mod tests {
         assert_eq!(cfg.session_ttl, Duration::from_secs(30 * 24 * 3600));
         assert_eq!(cfg.max_upload_bytes, 25 * 1024 * 1024);
         assert_eq!(cfg.storage_kind, StorageKind::Local);
-        assert_eq!(cfg.storage_local_dir, PathBuf::from(DEFAULT_STORAGE_LOCAL_DIR));
+        assert_eq!(
+            cfg.storage_local_dir,
+            PathBuf::from(DEFAULT_STORAGE_LOCAL_DIR)
+        );
         assert!(cfg.s3.is_none());
         assert_eq!(cfg.public_base_url, "http://127.0.0.1:8080");
         assert!(cfg.cors_origins.is_empty());
@@ -626,7 +615,10 @@ mod tests {
         let err = Config::from_map([("DATABASE_URL", "mysql://x/y")]).unwrap_err();
         assert_eq!(
             err,
-            ConfigError::invalid("DATABASE_URL", "expected a postgres:// or postgresql:// connection URL")
+            ConfigError::invalid(
+                "DATABASE_URL",
+                "expected a postgres:// or postgresql:// connection URL"
+            )
         );
     }
 
@@ -640,7 +632,13 @@ mod tests {
         let mut map = base();
         map.insert("LISTEN_ADDR".into(), "not-an-address".into());
         let err = Config::from_map(map).unwrap_err();
-        assert!(matches!(err, ConfigError::Invalid { var: "LISTEN_ADDR", .. }));
+        assert!(matches!(
+            err,
+            ConfigError::Invalid {
+                var: "LISTEN_ADDR",
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -734,7 +732,10 @@ mod tests {
     #[test]
     fn public_base_url_is_normalized() {
         let mut map = base();
-        map.insert("PUBLIC_BASE_URL".into(), "https://design.example.com/".into());
+        map.insert(
+            "PUBLIC_BASE_URL".into(),
+            "https://design.example.com/".into(),
+        );
         let cfg = Config::from_map(map).unwrap();
         assert_eq!(cfg.public_base_url, "https://design.example.com");
         // https implies secure cookies by default.
@@ -797,10 +798,7 @@ mod tests {
 
         let mut map = base();
         map.insert("RATE_LIMIT_PER_MINUTE".into(), "300".into());
-        assert_eq!(
-            Config::from_map(map).unwrap().rate_limit_per_minute,
-            300
-        );
+        assert_eq!(Config::from_map(map).unwrap().rate_limit_per_minute, 300);
     }
 
     #[test]

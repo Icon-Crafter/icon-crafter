@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use bytes::Bytes;
 use futures::future::BoxFuture;
 
-use super::{validate_key, ByteStream, ObjectMeta, ObjectStore, StoreError};
+use super::{ByteStream, ObjectMeta, ObjectStore, StoreError, validate_key};
 
 /// Object store backed by a local directory.
 #[derive(Debug, Clone)]
@@ -65,6 +65,8 @@ impl ObjectStore for LocalFsStore {
             Ok(path) => path,
             Err(error) => return Box::pin(async move { Err(error) }),
         };
+        // Own the key so the returned future only borrows `self`.
+        let key = key.to_owned();
         Box::pin(async move {
             if tokio::fs::try_exists(&path).await? {
                 // Content-addressed keys: identical bytes are already stored.
@@ -109,8 +111,8 @@ impl ObjectStore for LocalFsStore {
         Box::pin(async move {
             match tokio::fs::File::open(&path).await {
                 Ok(file) => {
-                    let stream = tokio_util::io::ReaderStream::new(file);
-                    Ok(Some(Box::pin(stream)))
+                    let stream: ByteStream = Box::pin(tokio_util::io::ReaderStream::new(file));
+                    Ok(Some(stream))
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
                 Err(error) => Err(StoreError::Io(error)),
@@ -170,7 +172,11 @@ mod tests {
                 .put("assets/a.png", Bytes::from_static(b"hello"))
                 .await
                 .expect("put");
-            let meta = store.head("assets/a.png").await.expect("head").expect("some");
+            let meta = store
+                .head("assets/a.png")
+                .await
+                .expect("head")
+                .expect("some");
             assert_eq!(meta.size, 5);
             // Second put of the same content-addressed key is a no-op.
             store
@@ -201,7 +207,14 @@ mod tests {
                 .expect_err("must be rejected");
             assert!(matches!(error, StoreError::InvalidKey(_)));
             assert!(!dir.path().parent().unwrap().join("escape.txt").exists());
-            assert_eq!(store.get("../../etc/passwd").await.err().map(|e| matches!(e, StoreError::InvalidKey(_))), Some(true));
+            assert_eq!(
+                store
+                    .get("../../etc/passwd")
+                    .await
+                    .err()
+                    .map(|e| matches!(e, StoreError::InvalidKey(_))),
+                Some(true)
+            );
         });
     }
 
@@ -210,8 +223,20 @@ mod tests {
         let (_dir, store) = store();
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         runtime.block_on(async {
-            assert!(store.get("assets/missing.png").await.expect("get").is_none());
-            assert!(store.head("assets/missing.png").await.expect("head").is_none());
+            assert!(
+                store
+                    .get("assets/missing.png")
+                    .await
+                    .expect("get")
+                    .is_none()
+            );
+            assert!(
+                store
+                    .head("assets/missing.png")
+                    .await
+                    .expect("head")
+                    .is_none()
+            );
         });
     }
 }

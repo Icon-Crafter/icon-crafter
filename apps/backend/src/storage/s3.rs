@@ -105,7 +105,8 @@ impl ObjectStore for S3Store {
                 }
             };
             let reader = tokio_util::io::ReaderStream::new(response.body.into_async_read());
-            Ok(Some(Box::pin(reader)))
+            let stream: ByteStream = Box::pin(reader);
+            Ok(Some(stream))
         })
     }
 

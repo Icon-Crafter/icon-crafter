@@ -39,7 +39,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["json"] }
 uuid = { workspace = true }
 indexmap = { workspace = true }
 chrono = { version = "0.4.45", features = ["serde"] }
@@ -48,6 +48,7 @@ sha2 = "0.11.1"
 base64 = "0.23.1"
 subtle = "2.6.1"
 hex = "0.4.3"
+bytes = "1.12.1"
 futures = "0.3.34"
 tokio-util = { version = "0.7.20", features = ["io"] }
 getrandom = "0.4"

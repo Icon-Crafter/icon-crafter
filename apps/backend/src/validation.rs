@@ -62,7 +62,9 @@ pub fn validate_email(raw: &str) -> Result<String, String> {
         return Err("local part is too long".to_owned());
     }
     if local.starts_with('.') || local.ends_with('.') || local.contains("..") {
-        return Err("local part must not start/end with a dot or contain consecutive dots".to_owned());
+        return Err(
+            "local part must not start/end with a dot or contain consecutive dots".to_owned(),
+        );
     }
     if !domain.contains('.') || domain.starts_with('.') || domain.ends_with('.') {
         return Err("domain must contain a dot and must not start/end with one".to_owned());
@@ -71,9 +73,7 @@ pub fn validate_email(raw: &str) -> Result<String, String> {
         label.is_empty()
             || label.starts_with('-')
             || label.ends_with('-')
-            || !label
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+            || !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
     }) {
         return Err("domain contains an invalid label".to_owned());
     }
@@ -118,9 +118,7 @@ pub fn validate_comment_body(raw: &str) -> Result<String, String> {
         return Err("must not be empty".to_owned());
     }
     if raw.chars().count() > MAX_COMMENT_CHARS {
-        return Err(format!(
-            "must be at most {MAX_COMMENT_CHARS} characters"
-        ));
+        return Err(format!("must be at most {MAX_COMMENT_CHARS} characters"));
     }
     if raw.contains('\0') {
         return Err("must not contain NUL bytes".to_owned());
@@ -178,7 +176,9 @@ pub fn slugify(raw: &str) -> String {
 /// Validate a display name and map failures into a 422 error.
 pub fn require_name(raw: &str, field: &str) -> Result<String, crate::error::ApiError> {
     validate_name(raw).map_err(|message| {
-        crate::error::ApiError::validation_failed(serde_json::json!([{ "field": field, "message": message }]))
+        crate::error::ApiError::validation_failed(
+            serde_json::json!([{ "field": field, "message": message }]),
+        )
     })
 }
 

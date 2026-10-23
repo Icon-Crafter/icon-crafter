@@ -10,7 +10,7 @@
 //! Internal failures never leak implementation details to the client: the full
 //! error is logged server-side and a generic message is returned.
 
-use axum::http::{header, HeaderValue, StatusCode};
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
 
@@ -29,13 +29,17 @@ pub struct ApiError {
     pub retry_after_secs: Option<u64>,
 }
 
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for ApiError {}
+
 impl ApiError {
     /// Build an error with an explicit status and code.
-    pub fn new(
-        status: StatusCode,
-        code: impl Into<String>,
-        message: impl Into<String>,
-    ) -> Self {
+    pub fn new(status: StatusCode, code: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             status,
             code: code.into(),
@@ -161,21 +165,28 @@ impl ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        let ApiError {
+            status,
+            code,
+            message,
+            details,
+            retry_after_secs,
+        } = self;
         let mut error = json!({
-            "code": self.code,
-            "message": self.message,
+            "code": code,
+            "message": message,
         });
-        if let Some(details) = self.details {
-            if let Some(object) = error.as_object_mut() {
-                object.insert("details".to_owned(), details);
-            }
+        if let Some(details) = details
+            && let Some(object) = error.as_object_mut()
+        {
+            object.insert("details".to_owned(), details);
         }
         let body = json!({ "error": error });
-        let mut response = (self.status, axum::Json(body)).into_response();
-        if let Some(seconds) = self.retry_after_secs {
-            if let Ok(value) = HeaderValue::from_str(&seconds.to_string()) {
-                response.headers_mut().insert(header::RETRY_AFTER, value);
-            }
+        let mut response = (status, axum::Json(body)).into_response();
+        if let Some(seconds) = retry_after_secs
+            && let Ok(value) = HeaderValue::from_str(&seconds.to_string())
+        {
+            response.headers_mut().insert(header::RETRY_AFTER, value);
         }
         response
     }
@@ -183,7 +194,6 @@ impl IntoResponse for ApiError {
 
 impl From<sqlx::Error> for ApiError {
     fn from(error: sqlx::Error) -> Self {
-        use sqlx::error::DatabaseError;
         match &error {
             sqlx::Error::RowNotFound => {
                 ApiError::not_found("the requested resource does not exist")
@@ -192,15 +202,14 @@ impl From<sqlx::Error> for ApiError {
                 "database_unavailable",
                 "the database is not accepting connections right now",
             ),
-            sqlx::Error::PoolClosed => ApiError::unavailable(
-                "database_unavailable",
-                "the database is shutting down",
-            ),
+            sqlx::Error::PoolClosed => {
+                ApiError::unavailable("database_unavailable", "the database is shutting down")
+            }
             sqlx::Error::Database(db) => match db.code().as_deref() {
                 Some("23505") => ApiError::conflict("the resource already exists"),
-                Some("23503") => ApiError::conflict(
-                    "the operation conflicts with a referenced resource",
-                ),
+                Some("23503") => {
+                    ApiError::conflict("the operation conflicts with a referenced resource")
+                }
                 Some("23514") | Some("22P02") | Some("22003") => ApiError::new(
                     StatusCode::UNPROCESSABLE_ENTITY,
                     "invalid_value",
@@ -210,7 +219,8 @@ impl From<sqlx::Error> for ApiError {
                     ApiError::internal_context("transaction serialization failure", error)
                 }
                 _ => {
-                    tracing::error!(error = %error, code = db.code(), "database error");
+                    let code = db.code().as_deref().unwrap_or("unknown").to_owned();
+                    tracing::error!(error = %error, code = %code, "database error");
                     ApiError::internal("database error")
                 }
             },
@@ -233,10 +243,7 @@ pub fn required<T>(value: Option<T>, message: &'static str) -> AppResult<T> {
 /// Parse a path UUID, returning a 400 instead of panicking.
 pub fn parse_uuid(value: &str, parameter: &'static str) -> AppResult<uuid::Uuid> {
     uuid::Uuid::parse_str(value).map_err(|_| {
-        ApiError::bad_request_with(
-            "invalid_parameter",
-            format!("`{parameter}` must be a UUID"),
-        )
+        ApiError::bad_request_with("invalid_parameter", format!("`{parameter}` must be a UUID"))
     })
 }
 

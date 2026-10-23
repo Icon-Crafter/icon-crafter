@@ -15,7 +15,7 @@ Last updated: session 3 (engine vertical slice complete and green; desktop IPC c
 |---|---|---|---|
 | F1 | Rust workspace (15 members incl. dp-editor), pinned toolchain, shared profiles | verified | `cargo metadata --no-deps`, commits a1765cb/1a6725a/8013f97 |
 | F2 | Tauri desktop shell + config + capabilities + icons | implemented | `cargo check -p iconcrafter-desktop` passes with the full IPC layer; app launch verification pending the real UI bundle |
-| F3 | Axum backend: auth/teams/projects/files/comments/versions/shares/assets/publish/WS | limited | unit tests 132 passed + clippy/fmt clean before disk incident; PostgreSQL integration tests not run (Docker missing); rerun queued |
+| F3 | Axum backend: auth/teams/projects/files/comments/versions/shares/assets/publish/WS | limited | 132 unit tests re-run green after the clippy refactor (`cargo test -p iconcrafter-server --lib`); `--features s3`/`--features otel` check clean; PostgreSQL integration tests not run (Docker missing) |
 | F4 | Docker compose for Postgres/MinIO/Redis | limited | `docker-compose.yml` + Dockerfile written and reviewed; never executed because Docker is not installed on the dev host |
 | F5 | Architecture, document format, collaboration protocol docs | implemented | `docs/ARCHITECTURE.md`, `DOCUMENT-FORMAT.md`, `COLLAB-PROTOCOL.md` |
 | F6 | Contract + design system docs | implemented | `docs/CONTRACT.md` (§8 implementation notes), `DESIGN-SYSTEM.md` |

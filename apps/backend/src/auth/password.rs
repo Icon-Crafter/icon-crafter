@@ -3,8 +3,8 @@
 //! Hashes are PHC strings that embed the per-password salt and the Argon2
 //! parameters, so parameters can be tuned later without breaking existing users.
 
-use argon2::password_hash::{PasswordHasher, PasswordVerifier, phc};
 use argon2::Argon2;
+use argon2::password_hash::{PasswordHasher, PasswordVerifier, phc};
 
 /// Hash a plaintext password with Argon2id and a fresh random salt.
 pub fn hash_password(password: &str) -> Result<String, String> {

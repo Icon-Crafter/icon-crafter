@@ -72,7 +72,10 @@ impl SniffedKind {
             Self::Png => declared == "image/png",
             Self::Jpeg => matches!(declared.as_str(), "image/jpeg" | "image/jpg"),
             Self::Webp => declared == "image/webp",
-            Self::Svg => matches!(declared.as_str(), "image/svg+xml" | "text/xml" | "text/plain"),
+            Self::Svg => matches!(
+                declared.as_str(),
+                "image/svg+xml" | "text/xml" | "text/plain"
+            ),
             Self::Ttf => matches!(declared.as_str(), "font/ttf" | "application/x-font-ttf"),
             Self::Otf => matches!(declared.as_str(), "font/otf" | "application/x-font-otf"),
             Self::Woff2 => declared == "font/woff2",
@@ -117,10 +120,13 @@ fn looks_like_svg(bytes: &[u8]) -> bool {
         return false;
     };
     let text = text.trim_start_matches('\u{feff}').trim_start();
-    if !(text.starts_with("<?xml") || text.starts_with("<svg")) {
+    let lower = text.to_ascii_lowercase();
+    // SVG is case-sensitive XML, but accept any casing in the prologue so a
+    // hand-written `<SVG>` is still recognised as an image and rejected by the
+    // content checks only if it is not markup at all.
+    if !(lower.starts_with("<?xml") || lower.starts_with("<svg")) {
         return false;
     }
-    let lower = text.to_ascii_lowercase();
     lower.contains("<svg")
 }
 
