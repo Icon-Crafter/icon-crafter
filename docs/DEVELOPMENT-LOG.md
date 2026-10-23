@@ -359,3 +359,11 @@ deleted `target/debug/incremental` (3.42 GB) while investigating.
 - Tests added (4): handshake + local batch + ack flow; gap detection + snapshot resync + remote convergence; duplicate sequence delivery ignored + presence cap; JSON tagging round-trip. `cargo test -p dp-collab` â†’ 23 passed; strict clippy clean.
 - Docs: docs/COLLAB-PROTOCOL.md status updated (engine complete, transport pending); FEATURE-CHECKLIST F19 updated.
 - Next: desktop WebSocket client + backend relay speaking these frames; then presence cursors in the UI and comment sync.
+
+
+## Session 13 (2026-10-24) â€” production (standalone) build verified
+
+- Found a real packaging gap: a plain `cargo build --release -p iconcrafter-desktop` still produced a *dev-mode* Tauri binary (loaded `devUrl` localhost:1420) because Tauri decides dev/production from the `custom-protocol` feature. Fixed by adding `custom-protocol = ["tauri/custom-protocol"]` to `apps/desktop/Cargo.toml`; production build command is now `cargo build -p iconcrafter-desktop --release --features custom-protocol` (documented in README/RELEASE-CHECKLIST/TESTING).
+- Verified the standalone app with the Vite dev server stopped: window loads `http://tauri.localhost/` (embedded apps/ui/dist), IPC works, and a full vertical-slice script passed: create rectangle via pointer input, save `.icraft` (1150 bytes, revision 2, dirty cleared), export PNG (896-byte header `89504E47`), SVG (editable `<path>` with fill #d9d9d9), PDF (`%PDF-1.7`), then reopen the saved file (1 node, revision 2, no errors). Screenshot: artifacts/standalone-release.png; exports: artifacts/standalone-test.{icraft,png,svg,pdf}.
+- Benchmarks rerun after fixing the per-frame layout rebuild: click ≈0.98 ms (spatial index), render ≈42 ms/frame (still above the 16 ms target, documented), layout 10.3 ms cold, serialize 111.7 ms. docs/PERFORMANCE.md updated.
+- Next: verify the UI's milestone-4 feature set in the standalone window once the frontend reports completion; then collaboration transport wiring and remaining Phase-6/7 items.

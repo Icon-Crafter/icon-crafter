@@ -252,3 +252,18 @@ cargo clippy -p dp-collab --all-targets -- -D warnings   # exit 0
 ```
 
 Protocol frames are transport-free; tests exercise handshake, ack, gap detection, snapshot resync and presence bounds without a socket or database.
+
+
+## Session 13 verification (standalone production build)
+
+```powershell
+cd "C:\Users\w4ua\Documents\Icon Crafter"
+pnpm --dir apps/ui build                                  # ensure dist is current
+cargo build -p iconcrafter-desktop --release --features custom-protocol   # production embed
+# stop the Vite dev server (no localhost:1420 listener), then:
+Start-Process target\release\iconcrafter-desktop.exe
+```
+
+Expected: window URL `http://tauri.localhost/` (embedded assets), status bar shows `TAURI IPC` and `rev N`, no dependency on the dev server. Verified IPC script (recorded in DEVELOPMENT-LOG session 13): create shape, save `.icraft`, export PNG/SVG/PDF, reopen file, all with zero errors.
+
+Production builds MUST use `--features custom-protocol`; without it Tauri compiles the binary in dev mode and tries to load the Vite dev URL (this was a real bug caught in session 13).

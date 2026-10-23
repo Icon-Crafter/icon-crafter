@@ -995,7 +995,8 @@ impl EditorState {
     /// Renders the current viewport into a frame.
     pub fn render(&mut self) -> Result<RenderFrame, EditorError> {
         let page_id = self.document.active_page_id();
-        self.invalidate_layout();
+        // Layout is invalidated by document edits (`apply`, input mutations),
+        // not per frame: recomputing it here made every render O(nodes).
         self.layout();
         let target = {
             let layout = self

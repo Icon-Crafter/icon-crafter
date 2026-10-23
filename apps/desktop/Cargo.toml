@@ -13,6 +13,13 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2.7.4", features = [] }
 
+[features]
+# Production build: embeds apps/ui/dist instead of using the Vite dev server.
+# Debug/`cargo build` keeps the fast `tauri dev` flow (devUrl + HMR).
+# Build a self-contained binary with:
+#   cargo build -p iconcrafter-desktop --release --features custom-protocol
+custom-protocol = ["tauri/custom-protocol"]
+
 [dependencies]
 tauri = { version = "2.12.5", features = [] }
 tauri-plugin-dialog = "2.8.3"

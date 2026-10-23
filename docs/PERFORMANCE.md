@@ -11,35 +11,40 @@ cargo run -p dp-editor --example bench_editor
 The benchmark builds a 500-frame grid with 20 children per frame = **10,500
 nodes**, then measures the operations the UI performs per interaction.
 
-## Measured (2026-10-24, session 11)
+## Measured (2026-10-24, session 12; machine idle)
 
 | Operation | Result | Notes |
 |---|---|---|
-| Cold layout, whole page | 11.7 ms | first full auto-layout pass **and** spatial-index build |
-| Layout x10 (invalidated each time) | 122.4 ms total (≈ 12.2 ms each) | index rebuild included |
+| Cold layout, whole page | 10.3 ms | first full auto-layout pass **and** spatial-index build |
+| Layout x10 (invalidated each time) | 134.0 ms total (≈ 13.4 ms each) | index rebuild included |
 | Node bounds x1000 | 0.1 ms | cached `LayoutMap` lookup |
-| Render 1440×900, 3 frames | 161.5 ms total (≈ 54 ms/frame) | CPU tiny-skia, 5,184,000 bytes/frame (RGBA8) |
-| Pointer click x200 (down+up each) | 241.4 ms (≈ 1.2 ms/click) | spatial-index hit test; includes selection change and overlay rebuild |
-| Serialize document (JSON) | 101.1 ms, 6.9 MiB | canonical JSON |
-| Deserialize + validate | 90.4 ms | 10,500 nodes |
-| Delete 50 nodes + undo | 42.8 ms | undoable transaction |
+| Render 1440×900, 3 frames | 125.8 ms total (≈ 42 ms/frame) | CPU tiny-skia, 5,184,000 bytes/frame (RGBA8) |
+| Pointer click x200 (down+up each) | 196.1 ms (≈ 0.98 ms/click) | spatial-index hit test; includes selection change and overlay rebuild |
+| Serialize document (JSON) | 111.7 ms, 6.9 MiB | canonical JSON |
+| Deserialize + validate | 92.8 ms | 10,500 nodes |
+| Delete 50 nodes + undo | 47.4 ms | undoable transaction |
 
-Hit testing now uses a `dp_geom::SpatialGrid` built with the layout cache: click
-cost dropped from ≈2.0 ms to ≈1.2 ms per click (≈39%) and no longer scales with
-total node count as long as the click area is small. The index costs ≈5 ms to
-build on a cold layout for 10,500 nodes.
+Two real fixes came out of these measurements:
+
+1. **Hit testing / marquee** now use a `dp_geom::SpatialGrid` built with the
+   layout cache (invalidated on document change): ≈2.0 ms → ≈1.0 ms per
+   click update (inside the 1 ms target), independent of total node count for
+   small click areas.
+2. **Render no longer invalidates layout per frame.** It previously rebuilt
+   layout for the whole document on every call (≈10 ms for 10,500 nodes); that
+   was a correctness-neutral bug that made every presented frame O(nodes).
 
 ## Honest assessment against the targets in docs/ARCHITECTURE.md
 
 - Layout, bounds lookup and hit testing are inside targets on this document.
 - Full-page serialization is fast enough for autosave on a background thread.
-- **Render is above the 16 ms interaction target** for this document when the
-  viewport contains many visible nodes; culling currently iterates the whole
-  display list. Next optimization: back the scene cull with the same spatial
-  index and cache the static subtree order, then re-measure.
-- **Pointer click at ~1.2 ms** still rebuilds overlays for every event; the
-  overlay construction is the next target (rebuild overlays only on state
-  change / visible-world changes).
+- **Render is still above the 16 ms interaction target** (~42 ms/frame) when the
+  viewport contains many visible nodes. The remaining cost is scene building +
+  per-item tiny-skia rasterization + the straight-alpha conversion for IPC; next
+  optimizations: static subtree culling via the spatial index, batching by paint
+  and avoiding the full-frame alpha conversion for the GPU-ready path.
+- **Pointer click at ~1 ms** still rebuilds overlays for every event; overlay
+  construction is the next target.
 - These numbers are *dev-profile* numbers. A release build is expected to be
   faster (LTO), but we only quote measured numbers, so no release claims are
   made here until the release benchmark is run.

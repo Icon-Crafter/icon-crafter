@@ -87,3 +87,16 @@ to see which rows apply to the current build.
 | Phase 4 editor depth | Vector/typography/auto-layout/components rows verified with tests + app |
 | Phase 5–7 | Prototype, Dev Mode, backend, workspaces verified per checklist |
 | Phase 8 release | Security, performance, packaging and docs items all ticked |
+
+
+## Status (2026-10-24, session 13)
+
+Verified with evidence (see DEVELOPMENT-LOG / TESTING):
+
+- [x] cargo test -p ... full engine suite: 332 tests green (13 crates).
+- [x] Backend unit suite: 132 tests green (cargo test -p iconcrafter-server --offline --lib).
+- [x] Strict clippy clean for dp-devmode/dp-editor/dp-collab/dp-model/dp-render (others pass default clippy; workspace-wide -D warnings gate is not yet free of third-party noise).
+- [x] Production desktop binary builds and runs standalone: cargo build -p iconcrafter-desktop --release --features custom-protocol — embedded UI at http://tauri.localhost/, save/reopen/export verified with the dev server stopped.
+- [x] Benchmarks exist with reported numbers (docs/PERFORMANCE.md) and one optimization landed (spatial-index hit testing; per-frame layout rebuild removed).
+
+Still open for a release candidate: NSIS/MSI installer (cargo tauri build — needs the Tauri CLI), backend integration tests with a live Postgres (Docker not installed on this machine), dependency audit (cargo audit), accessibility pass, and workspace modules (whiteboard/slides/website) which are planned not implemented.
