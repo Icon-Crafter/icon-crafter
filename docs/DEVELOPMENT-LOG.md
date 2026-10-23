@@ -351,3 +351,11 @@ deleted `target/debug/incremental` (3.42 GB) while investigating.
 - Full engine suite re-run green: 13 crates, 332 tests (counts per crate in docs/FEATURE-CHECKLIST.md Q1); backend unit suite re-run after the model changes: 132 passed.
 - Dev Mode verified natively in the Tauri window (real Inspect metrics + generated CSS), screenshots in artifacts/devmode-native-inspect.png / devmode-native-code.png.
 - Next: overlay rebuild cost, scene culling via spatial index, then frontend milestone 4 integration (design systems + prototype authoring/presentation UI).
+
+
+## Session 12 (2026-10-24) â€” collaboration session layer
+
+- Added `crates/dp-collab/src/session.rs` (transport-independent client state machine): `ClientMessage`/`ServerMessage` JSON frames (hello/ops/ack/reject/sync_request/presence and welcome/ops/ack/snapshot/presence/presence_left/reject), outgoing batch queue with double-send protection, acknowledgement handling, server-sequence gap detection + snapshot resynchronisation (unsent local batches reported as lost), presence list bounded to 64 peers, and events for the UI (local/remote batches, acked, rejected, resync required/resynced, presence changed).
+- Tests added (4): handshake + local batch + ack flow; gap detection + snapshot resync + remote convergence; duplicate sequence delivery ignored + presence cap; JSON tagging round-trip. `cargo test -p dp-collab` â†’ 23 passed; strict clippy clean.
+- Docs: docs/COLLAB-PROTOCOL.md status updated (engine complete, transport pending); FEATURE-CHECKLIST F19 updated.
+- Next: desktop WebSocket client + backend relay speaking these frames; then presence cursors in the UI and comment sync.

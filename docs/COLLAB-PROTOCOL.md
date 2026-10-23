@@ -1,8 +1,14 @@
 # Collaboration protocol (draft → implementation incrementally)
 
-Status: **design** for `dp-collab`; implemented in phases 6+. Transport-independent: the
-same types and convergence rules are used by the desktop editor (local undo/sync) and the
-server (relay/sequencer).
+Status: **engine implementation complete** for `dp-collab`; transport wiring is the remaining
+work. Implemented in phases 6+: actors/HLC clocks, RGA sibling ordering, per-field LWW ops,
+replica materialization, and a transport-independent client session state machine
+(`hello`/`ops`/`ack`/`reject`/`sync_request`/`presence` client frames and
+`welcome`/`ops`/`ack`/`snapshot`/`presence`/`presence_left`/`reject` server frames, gap
+detection + snapshot resync, bounded presence). Verified by 23 `dp-collab` tests; strict
+clippy clean. The Axum WebSocket relay, Postgres op journal integration, and desktop
+WebSocket client are the next phase. Transport-independent: the same types and convergence
+rules are used by the desktop editor (local undo/sync) and the server (relay/sequencer).
 
 ## Goals
 

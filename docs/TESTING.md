@@ -241,3 +241,14 @@ cargo run -p dp-editor --example bench_editor      # see docs/PERFORMANCE.md
 ```
 
 Expected benchmark profile: Windows dev profile, opt-level 1 for our crates / 2 for deps. Numbers are machine-specific; compare only like-for-like.
+
+
+## Session 12 verification (collaboration session layer)
+
+```powershell
+cd "C:\Users\w4ua\Documents\Icon Crafter"
+cargo test -p dp-collab                     # 23 passed
+cargo clippy -p dp-collab --all-targets -- -D warnings   # exit 0
+```
+
+Protocol frames are transport-free; tests exercise handshake, ack, gap detection, snapshot resync and presence bounds without a socket or database.

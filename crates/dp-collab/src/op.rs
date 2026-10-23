@@ -184,7 +184,8 @@ fn decode_optional<T: serde::de::DeserializeOwned>(
 /// an allocation to every op to shrink a struct that is never stored in large
 /// collections on the client.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Operation on the replicated document.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Op {
     /// Creates a node under a parent (or at the page root).
@@ -295,7 +296,7 @@ impl Op {
 }
 
 /// Group of ops emitted by one client in one batch.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Envelope {
     /// Wire protocol version.
     pub protocol: u32,
