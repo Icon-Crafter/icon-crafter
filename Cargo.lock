@@ -1793,6 +1793,7 @@ dependencies = [
  "dp-layout",
  "dp-model",
  "dp-persist",
+ "dp-prototype",
  "dp-render",
  "dp-text",
  "indexmap 2.14.2",

@@ -13,7 +13,9 @@
 use dp_geom::{Point, Rect};
 use dp_model::{
     CollectionId, Color, ComponentId, ModeId, NodeId, PageId, StyleId, TextAlign, TextStyle,
+    VariableType, VariableValue,
 };
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -159,12 +161,27 @@ pub struct SnapshotMode {
     pub name: String,
 }
 
+/// One design variable with its per-mode values.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SnapshotVariableEntry {
+    pub id: dp_model::VariableId,
+    pub name: String,
+    pub resolved_type: VariableType,
+    #[serde(default)]
+    pub values: IndexMap<ModeId, VariableValue>,
+}
+
 /// Variable collection entry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SnapshotVariableCollection {
     pub id: CollectionId,
     pub name: String,
     pub modes: Vec<SnapshotMode>,
+    /// Mode applied to this collection, when explicitly pinned.
+    #[serde(default)]
+    pub active_mode_id: Option<ModeId>,
+    #[serde(default)]
+    pub variables: Vec<SnapshotVariableEntry>,
 }
 
 /// One row of the layers panel.
@@ -223,6 +240,8 @@ pub struct SnapshotDetail {
     pub layout: Option<dp_model::AutoLayout>,
     pub constraints: Option<dp_model::Constraints>,
     pub component: Option<dp_model::ComponentRole>,
+    /// Prototype interactions attached to this node.
+    pub prototype: Option<dp_model::PrototypeNode>,
     pub is_inside_instance: bool,
     /// World-space AABB.
     pub absolute_bounds: Rect,
@@ -238,6 +257,15 @@ pub struct SnapshotError {
     pub severity: String,
 }
 
+/// A clickable prototype hotspot while presenting.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SnapshotHotspot {
+    pub node_id: NodeId,
+    /// World-space AABB of the hotspot.
+    pub rect: Rect,
+    pub label: String,
+}
+
 /// Prototype presentation state (additive contract field).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SnapshotPrototype {
@@ -246,6 +274,8 @@ pub struct SnapshotPrototype {
     pub frame_name: String,
     pub can_back: bool,
     pub overlay_count: usize,
+    #[serde(default)]
+    pub hotspots: Vec<SnapshotHotspot>,
 }
 
 /// The complete engine state returned by `engine_state` and every mutating
@@ -293,17 +323,7 @@ impl EditorState {
             })
             .collect();
         let viewport = self.viewport;
-        let prototype = self.playback.as_ref().map(|state| SnapshotPrototype {
-            active: true,
-            frame_id: state.frame,
-            frame_name: self
-                .document
-                .node(state.frame)
-                .map(|node| node.name.clone())
-                .unwrap_or_default(),
-            can_back: state.can_back(),
-            overlay_count: state.overlay_count,
-        });
+        let prototype = self.prototype_snapshot();
         Snapshot {
             doc: Some(SnapshotDocMeta {
                 id: self.document.id.to_string(),
@@ -402,9 +422,55 @@ impl EditorState {
             layout: node.layout.clone(),
             constraints: node.constraints,
             component: node.component.clone(),
+            prototype: node.prototype.clone(),
             is_inside_instance: inside_instance,
             absolute_bounds: world,
             resolved: None,
+        })
+    }
+
+    fn prototype_snapshot(&mut self) -> Option<SnapshotPrototype> {
+        let (frame, can_back, overlay_count) = {
+            let session = self.playback.as_ref()?;
+            (session.frame, session.can_back(), session.overlay_count)
+        };
+        self.layout();
+        let frame_name = self
+            .document
+            .node(frame)
+            .map(|node| node.name.clone())
+            .unwrap_or_default();
+        let mut interactive: Vec<(NodeId, String)> = Vec::new();
+        if let Some(page_id) = self.document.page_containing(frame)
+            && let Some(page) = self.document.page(page_id)
+        {
+            page.walk_preorder(frame, &mut |node| {
+                let interactive_node = node
+                    .prototype
+                    .as_ref()
+                    .is_some_and(|prototype| !prototype.interactions.is_empty());
+                if interactive_node && node.visible {
+                    interactive.push((node.id, node.name.clone()));
+                }
+            });
+        }
+        let mut hotspots = Vec::new();
+        for (id, label) in interactive {
+            if let Some(rect) = self.node_bounds(id) {
+                hotspots.push(SnapshotHotspot {
+                    node_id: id,
+                    rect,
+                    label,
+                });
+            }
+        }
+        Some(SnapshotPrototype {
+            active: true,
+            frame_id: frame,
+            frame_name,
+            can_back,
+            overlay_count,
+            hotspots,
         })
     }
 
@@ -483,6 +549,12 @@ impl EditorState {
                 .map(|collection| SnapshotVariableCollection {
                     id: collection.id,
                     name: collection.name.clone(),
+                    active_mode_id: self
+                        .document
+                        .settings
+                        .active_modes
+                        .get(&collection.id)
+                        .copied(),
                     modes: collection
                         .modes
                         .iter()
@@ -491,6 +563,19 @@ impl EditorState {
                             id: *mode,
                             // Schema v1 stores mode ids, not names.
                             name: format!("Mode {}", index + 1),
+                        })
+                        .collect(),
+                    variables: self
+                        .document
+                        .variables
+                        .variables
+                        .values()
+                        .filter(|variable| variable.collection_id == collection.id)
+                        .map(|variable| SnapshotVariableEntry {
+                            id: variable.id,
+                            name: variable.name.clone(),
+                            resolved_type: variable.resolved_type,
+                            values: variable.values.clone(),
                         })
                         .collect(),
                 })

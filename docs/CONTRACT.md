@@ -430,3 +430,42 @@ artboards are not clipped away yet; delayed/after-delay triggers need the previe
 loop (`tick`) and do not advance on click-driven mutation; expression/conditional actions run
 in the runtime but have no authoring UI; keyboard triggers are not routed while presenting.
 
+
+
+## 11. Prototype authoring + Dev Mode annotation resolution (v1.4 addendum)
+
+Commands added to the generic `command` dispatcher (response stays `EngineState`):
+
+| Command | Args | Notes |
+|---|---|---|
+| `add_interaction` | `node_id?: string, trigger: TriggerJson, actions: ActionJson[] | ActionJson` | node defaults to first selection; trigger/action JSON are the model shapes (`{"type":"click","delay_ms"?}`, `{"type":"hover"}`, `{"type":"press"}`, `{"type":"key","key"}`, `{"type":"after_delay","delay_ms"}`; actions `navigate_to`/`open_overlay`/`close_overlay`/`scroll_to`/`back`/`set_variable`). Undoable; empty action lists and invalid triggers are validation errors. |
+| `remove_interaction` | `node_id?: string, interaction_id: string` | removes by id; returns `Ok{changed:false}` for unknown ids. |
+| `dev_resolve_annotation` | `annotation_id: UUID string` | resolves an annotation; returns `Ok{changed:true}` when it existed. |
+
+Additive snapshot field: `NodeDetail.prototype: { interactions: [{ id, trigger, actions }] } | null` (model JSON shapes), used by the prototype authoring panel.
+
+Limitations: interaction authoring has no condition/expression editor yet; the presentation runtime replays clicks (delay/key triggers documented in §11 above); deleting a frame does not cascade-delete interactions that target it (validation reports broken targets).
+
+
+## 12. Variables listing + presentation hotspots (v1.5 addendum)
+
+```
+SnapshotVariableCollection {
+  id, name,
+  modes: [{ id, name }],
+  active_mode_id?: ModeId,          // absent until pinned via set_active_mode
+  variables: [{
+    id, name,
+    resolved_type: "color" | "float" | "string" | "boolean",
+    values: { [mode_id]: VariableValueJson }
+  }]
+}
+SnapshotPrototype {
+  active, frame_id, frame_name, can_back, overlay_count,
+  hotspots: [{ node_id, rect: {x,y,w,h} /* world AABB */, label }]
+}
+```
+
+- `VariableValueJson` = `{"type":"color","color":{r,g,b,a}}` | `{"type":"float","value"}` | `{"type":"string","value"}` | `{"type":"boolean","value"}` | `{"type":"alias","variable_id"}`.
+- Mode names are still synthetic (schema v1 does not persist them). Alias values must be rendered as references, not resolved colours.
+- `hotspots` is empty unless `prototype.active`; it lists visible nodes with interactions inside the presented frame (current frame first; open overlays' hotspots are not yet included — documented limitation).

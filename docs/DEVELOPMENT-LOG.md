@@ -335,3 +335,10 @@ deleted `target/debug/incremental` (3.42 GB) while investigating.
 
 
 
+
+
+## Session 10 (2026-10-24) â€” prototype authoring + annotation resolution + native verification
+
+- Editor/engine: `EditorState::add_interaction`/`remove_interaction` (undoable prototype patches, `validate_local` enforcement), `SnapshotDetail.prototype`, `dev_resolve_annotation`; generic command arms `add_interaction`/`remove_interaction`/`dev_resolve_annotation` and real `play`/`stop`; desktop `dev_resolve_annotation` command registered. New integration suite `crates/dp-editor/tests/prototype_authoring.rs` (3 tests) plus existing editor tests: `cargo test -p dp-editor` green (26 tests), strict clippy clean, `cargo check -p iconcrafter-desktop` green. Docs updated (CONTRACT §11 v1.4).
+- Native verification procedure: the debug Tauri binary points at `devUrl` (localhost:1420), so a WebView2 window with `TAURI IPC` requires `pnpm dev`; for a self-contained check use `--release` with `frontendDist` or keep the dev server running. See docs/TESTING.md.
+- Next: frontend milestone 4 (design-system panels + prototype authoring/presentation UI); then collaboration transport wiring (desktop â†” Axum WS relay) and remaining workspaces.

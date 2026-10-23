@@ -667,6 +667,20 @@ pub fn dev_mark_ready(
 }
 
 #[tauri::command]
+pub fn dev_resolve_annotation(
+    state: State<'_, IpcState>,
+    annotation_id: String,
+) -> Result<Value, IpcError> {
+    let annotation = annotation_id
+        .parse::<uuid::Uuid>()
+        .map_err(|_| IpcError::validation("annotation id must be a UUID"))?;
+    with_editor(&state, |editor| {
+        editor.dev_resolve_annotation(annotation);
+        serde_json::to_value(&editor.handoff).map_err(|error| IpcError::internal(error.to_string()))
+    })
+}
+
+#[tauri::command]
 pub fn dev_compare(
     state: State<'_, IpcState>,
     document_json: String,

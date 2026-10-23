@@ -51,6 +51,7 @@ pub fn run() {
             ipc::dev_handoff,
             ipc::dev_add_annotation,
             ipc::dev_mark_ready,
+            ipc::dev_resolve_annotation,
             ipc::dev_compare,
             ipc::dev_snapshot,
             ipc::prototype_play,

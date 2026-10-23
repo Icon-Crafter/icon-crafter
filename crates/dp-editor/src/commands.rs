@@ -572,9 +572,68 @@ impl EditorState {
                     "{name} is not implemented in this build yet"
                 )))
             }
-            "play" | "stop" => Err(EditorError::Unsupported(
-                "prototype playback is not implemented in this build yet".to_owned(),
-            )),
+            "play" => {
+                self.prototype_play(None)?;
+                Ok(false)
+            }
+            "stop" => {
+                self.prototype_stop();
+                Ok(false)
+            }
+            "add_interaction" => {
+                let node_id = optional_id(args, "node_id")?
+                    .or_else(|| self.selection.first().copied())
+                    .ok_or_else(|| {
+                        EditorError::InvalidArguments(
+                            "select a layer to attach the interaction to".to_owned(),
+                        )
+                    })?;
+                let trigger_value = args.get("trigger").cloned().ok_or_else(|| {
+                    EditorError::InvalidArguments("trigger is required".to_owned())
+                })?;
+                let trigger: dp_model::prototype::Trigger = serde_json::from_value(trigger_value)
+                    .map_err(|error| {
+                        EditorError::InvalidArguments(format!("invalid trigger: {error}"))
+                    })?;
+                let actions_value = args
+                    .get("actions")
+                    .or_else(|| args.get("action"))
+                    .cloned()
+                    .ok_or_else(|| {
+                        EditorError::InvalidArguments("actions are required".to_owned())
+                    })?;
+                let actions: Vec<dp_model::prototype::Action> = if actions_value.is_array() {
+                    serde_json::from_value(actions_value).map_err(|error| {
+                        EditorError::InvalidArguments(format!("invalid actions: {error}"))
+                    })?
+                } else {
+                    vec![serde_json::from_value(actions_value).map_err(|error| {
+                        EditorError::InvalidArguments(format!("invalid action: {error}"))
+                    })?]
+                };
+                let interaction = dp_model::prototype::Interaction {
+                    id: dp_model::InteractionId::new_v4(),
+                    trigger,
+                    actions,
+                };
+                self.add_interaction(node_id, interaction)?;
+                Ok(true)
+            }
+            "remove_interaction" => {
+                let node_id = optional_id(args, "node_id")?
+                    .or_else(|| self.selection.first().copied())
+                    .ok_or_else(|| {
+                        EditorError::InvalidArguments(
+                            "select a layer that owns the interaction".to_owned(),
+                        )
+                    })?;
+                let interaction_id: dp_model::InteractionId = json_field(args, "interaction_id")?;
+                Ok(self.remove_interaction(node_id, interaction_id)?)
+            }
+            "dev_resolve_annotation" => {
+                let annotation_id: uuid::Uuid = json_field(args, "annotation_id")?;
+                Ok(self.dev_resolve_annotation(annotation_id))
+            }
             "dev_mode_toggle" => {
                 let enabled = args
                     .get("enabled")

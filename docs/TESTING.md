@@ -216,3 +216,16 @@ first frame with editing chrome hidden, clicking the button navigates to frame 2
 back, Escape exits. Confirm the wheel still zooms and the status bar reports frame changes.
 
 
+
+
+## Session 10 verification (prototype authoring, Dev Mode resolution)
+
+```powershell
+cd "C:\Users\w4ua\Documents\Icon Crafter"
+cargo test -p dp-editor --no-default-features          # 26 passed (incl prototype_authoring: 3)
+cargo test -p dp-model --no-default-features           # 72 passed
+cargo clippy -p dp-editor --no-default-features --all-targets -- -D warnings   # exit 0
+cargo check -p iconcrafter-desktop                     # exit 0
+```
+
+Manual/native: run `pnpm --dir apps/ui dev --port 1420` then `cargo build -p iconcrafter-desktop` and start `target\debug\iconcrafter-desktop.exe`; select a shape, open the right sidebar Dev Mode, confirm Inspect values, Switch to Code and copy CSS; add an annotation and resolve it; choose the Prototype section and add a click interaction targeting another frame; press Present and click the hotspot.

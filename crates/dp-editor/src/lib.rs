@@ -607,6 +607,103 @@ impl EditorState {
         self.handoff.mark_ready(status, by, at);
     }
 
+    /// Resolves a Dev Mode annotation; returns whether it existed.
+    pub fn dev_resolve_annotation(&mut self, annotation: uuid::Uuid) -> bool {
+        let resolved = self.handoff.resolve_annotation(annotation);
+        if resolved {
+            self.handoff.revision = self.document.revision;
+        }
+        resolved
+    }
+
+    /// Attaches a prototype interaction to a node as an undoable change.
+    pub fn add_interaction(
+        &mut self,
+        node_id: NodeId,
+        interaction: dp_model::prototype::Interaction,
+    ) -> Result<(), EditorError> {
+        let node = self
+            .document
+            .node(node_id)
+            .ok_or_else(|| EditorError::InvalidArguments(format!("unknown node {node_id}")))?
+            .clone();
+        let mut prototype = node
+            .prototype
+            .clone()
+            .unwrap_or_else(|| dp_model::PrototypeNode {
+                interactions: Vec::new(),
+            });
+        if prototype
+            .interactions
+            .iter()
+            .any(|existing| existing.id == interaction.id)
+        {
+            return Err(EditorError::InvalidArguments(
+                "this interaction already exists".to_owned(),
+            ));
+        }
+        let issues = interaction.validate_local();
+        if !issues.is_empty() {
+            return Err(EditorError::InvalidArguments(issues.join("; ")));
+        }
+        prototype.interactions.push(interaction);
+        let patch = dp_model::NodePatch {
+            prototype: Some(Some(prototype)),
+            ..Default::default()
+        };
+        let transaction = dp_model::ops::patch_nodes(
+            &self.document,
+            &[node_id],
+            patch,
+            "Add interaction",
+            None,
+        )?;
+        self.apply(transaction)?;
+        self.status = "Added interaction".to_owned();
+        Ok(())
+    }
+
+    /// Removes a prototype interaction; returns whether it existed.
+    pub fn remove_interaction(
+        &mut self,
+        node_id: NodeId,
+        interaction_id: dp_model::InteractionId,
+    ) -> Result<bool, EditorError> {
+        let node = self
+            .document
+            .node(node_id)
+            .ok_or_else(|| EditorError::InvalidArguments(format!("unknown node {node_id}")))?
+            .clone();
+        let Some(mut prototype) = node.prototype.clone() else {
+            return Ok(false);
+        };
+        let before = prototype.interactions.len();
+        prototype
+            .interactions
+            .retain(|existing| existing.id != interaction_id);
+        if prototype.interactions.len() == before {
+            return Ok(false);
+        }
+        let after = if prototype.interactions.is_empty() {
+            None
+        } else {
+            Some(prototype)
+        };
+        let patch = dp_model::NodePatch {
+            prototype: Some(after),
+            ..Default::default()
+        };
+        let transaction = dp_model::ops::patch_nodes(
+            &self.document,
+            &[node_id],
+            patch,
+            "Remove interaction",
+            None,
+        )?;
+        self.apply(transaction)?;
+        Ok(true)
+    }
+
     /// World matrix of a node, honouring auto layout.
     pub fn node_matrix(&mut self, id: NodeId) -> Option<Mat2D> {
         self.layout().get(id).map(|layout| layout.matrix)
