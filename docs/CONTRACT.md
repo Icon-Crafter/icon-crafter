@@ -289,3 +289,53 @@ The earlier §4 `distribute` spelling `spacing: "gap"|"center"` is superseded by
 numeric form above. Group/boolean operand order follows the engine selection order; the
 UI must show that order (it is the z-order of the selection).
 
+## 8. v1.2 implementation notes — session 3 (engine IPC landing)
+
+These notes describe how the Rust implementation (`crates/dp-editor`, `apps/desktop/src/ipc.rs`)
+realizes the contract above. They are authoritative where they add detail.
+
+### 8.1 Overlay coordinate spaces
+
+The overlay is produced in Rust. World values are authoritative; the UI converts to screen
+with `worldToScreen` (already in `contract.ts`).
+
+* `overlay.selection[].corners` — WORLD-space rotated corners (`tl, tr, br, bl`), currently
+  the world AABB of each node (rotation-aware outlines are a later refinement; hit testing
+  is rotation-correct).
+* `overlay.hover` — a WORLD-space `SelectionBox` carrying the hovered node id.
+* `overlay.handles[].pos` — WORLD-space handle centres; `kind` is `corner` | `edge` |
+  `rotate` (the engine's `nw/n/ne/e/se/s/sw/w` kinds are collapsed to `corner`/`edge`).
+* `overlay.snap_lines` — WORLD space: `axis: "x"` is a vertical line (`pos` = x,
+  `from`/`to` = y range), `axis: "y"` is horizontal.
+* `overlay.marquee` — WORLD-space rect.
+* `overlay.guides`, `overlay.cursors` — reserved for collaboration; empty in this build.
+* `overlay.text_edit` — screen-space caret hint `{ caret: {x,y}, selection: [start,end] }`.
+  v1 approximates caret x/y from character counts (no glyph-metric pass yet); the
+  authoritative editing surface is the top-level `text_edit` (DOM textarea over `screen_rect`).
+* `overlay.tool_hint` is `null` when there is nothing to show.
+
+### 8.2 render_frame
+
+`render_frame` returns raw RGBA8 bytes (straight alpha), length
+`round(viewport.width*dpr) * round(viewport.height*dpr) * 4`, row-major, top-left origin.
+The overlay is NOT included; the UI draws it from `EngineState.overlay`. `quality` is
+accepted and ignored by the CPU reference renderer in this build.
+
+### 8.3 Command failures
+
+Validation failures are reported inside the returned `EngineState.errors` array (one-shot:
+they do not persist into the next snapshot), with `code` mapped to the §5 strings. Unknown
+or not-yet-implemented commands return `unsupported` and must be surfaced visibly by the
+UI — never silently ignored, never a fake success.
+
+### 8.4 Explicit limitations in this build
+
+* `import_image` returns an honest `unsupported` error; image assets land with the
+  asset-storage milestone.
+* `import_svg` preserves editable cubic vector geometry, solid fills and strokes; gradients
+  are reduced to their first stop and text is converted to outlines by the importer
+  (warnings are reported in `status`).
+* Export uses the selection bounds when a selection exists, otherwise the whole page.
+  `export_*.args.node_ids` is accepted but currently equivalent to selection/page.
+* One document per app instance (multi-window is a later milestone).
+

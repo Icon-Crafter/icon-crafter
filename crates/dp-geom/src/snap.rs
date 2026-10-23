@@ -486,7 +486,12 @@ mod tests {
         assert!(result.snapped_y);
         assert!((result.delta.x + 2.0).abs() < 1e-9);
         assert!(result.delta.y.abs() < 1e-9);
-        assert!(result.lines.iter().any(|l| l.axis == Axis::X && (l.pos - 100.0).abs() < 1e-9));
+        assert!(
+            result
+                .lines
+                .iter()
+                .any(|l| l.axis == Axis::X && (l.pos - 100.0).abs() < 1e-9)
+        );
     }
 
     #[test]

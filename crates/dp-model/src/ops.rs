@@ -10,13 +10,13 @@ use std::collections::HashMap;
 use dp_geom::{Mat2D, Rect};
 use serde::{Deserialize, Serialize};
 
+use crate::ModelError;
 use crate::document::Document;
 use crate::geometry::NodeGeometry;
 use crate::ids::{NodeId, PageId};
 use crate::node::{Node, NodeKind, Transform};
 use crate::page::Page;
 use crate::transactions::{Edit, History, NodePatch, Transaction};
-use crate::ModelError;
 
 /// Alignment target for the align commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -193,9 +193,7 @@ pub fn delete_nodes(
             let Some(node) = page.get(*node_id) else {
                 continue;
             };
-            let (parent, index) = page
-                .index_in_parent(*node_id)
-                .unwrap_or((node.parent, 0));
+            let (parent, index) = page.index_in_parent(*node_id).unwrap_or((node.parent, 0));
             transaction.push(Edit::RemoveNode {
                 page: page_id,
                 node: node.clone(),
@@ -408,10 +406,11 @@ pub fn group_nodes(
             .ok_or_else(|| ModelError::InvalidDocument("missing parent matrix".to_string()))?,
         None => Mat2D::IDENTITY,
     };
-    let group_world = parent_world.mul(Transform::new(bounds.x, bounds.y, bounds.w, bounds.h).matrix());
-    let inverse = group_world
-        .inverse()
-        .ok_or_else(|| ModelError::InvalidDocument("group transform is not invertible".to_string()))?;
+    let group_world =
+        parent_world.mul(Transform::new(bounds.x, bounds.y, bounds.w, bounds.h).matrix());
+    let inverse = group_world.inverse().ok_or_else(|| {
+        ModelError::InvalidDocument("group transform is not invertible".to_string())
+    })?;
     let mut ordered: Vec<(usize, NodeId)> = Vec::new();
     for id in &roots {
         if let Some((_, index)) = page.index_in_parent(*id) {
@@ -426,9 +425,9 @@ pub fn group_nodes(
         let (old_parent, old_index) = page
             .index_in_parent(id)
             .ok_or(ModelError::NodeNotFound(id))?;
-        let world = page
-            .absolute_matrix(id)
-            .ok_or(ModelError::InvalidDocument("missing node matrix".to_string()))?;
+        let world = page.absolute_matrix(id).ok_or(ModelError::InvalidDocument(
+            "missing node matrix".to_string(),
+        ))?;
         let local = inverse.mul(world);
         let mut after = node.clone();
         after.parent = Some(group_id);
@@ -578,9 +577,8 @@ pub fn boolean_nodes(
             .ok_or_else(|| ModelError::InvalidDocument("missing parent matrix".to_string()))?,
         None => Mat2D::IDENTITY,
     };
-    let boolean_world = parent_world.mul(
-        Transform::new(bounds.x, bounds.y, bounds.w, bounds.h).matrix(),
-    );
+    let boolean_world =
+        parent_world.mul(Transform::new(bounds.x, bounds.y, bounds.w, bounds.h).matrix());
     let inverse = boolean_world.inverse().ok_or_else(|| {
         ModelError::InvalidDocument("boolean transform is not invertible".to_string())
     })?;
@@ -598,9 +596,9 @@ pub fn boolean_nodes(
         let (old_parent, old_index) = page
             .index_in_parent(id)
             .ok_or(ModelError::NodeNotFound(id))?;
-        let world = page
-            .absolute_matrix(id)
-            .ok_or(ModelError::InvalidDocument("missing node matrix".to_string()))?;
+        let world = page.absolute_matrix(id).ok_or(ModelError::InvalidDocument(
+            "missing node matrix".to_string(),
+        ))?;
         let local = inverse.mul(world);
         let mut after = child.clone();
         after.parent = Some(boolean_id);
@@ -765,9 +763,9 @@ pub fn distribute_nodes(
             DistributeAxis::Horizontal => dp_geom::Point::new(cursor - current, 0.0),
             DistributeAxis::Vertical => dp_geom::Point::new(0.0, cursor - current),
         };
-        let inverse = parent_matrix.inverse().ok_or_else(|| {
-            ModelError::InvalidDocument("singular parent matrix".to_string())
-        })?;
+        let inverse = parent_matrix
+            .inverse()
+            .ok_or_else(|| ModelError::InvalidDocument("singular parent matrix".to_string()))?;
         let delta = inverse.apply_vector(delta_world);
         if let Some(page) = document.page(*page_id) {
             if let Some(node) = page.get(*id) {
@@ -983,11 +981,20 @@ mod tests {
             .iter()
             .map(|id| page.world_bounds(*id).unwrap().x)
             .collect();
-        assert!(lefts.windows(2).all(|pair| (pair[0] - pair[1]).abs() < 1e-9));
+        assert!(
+            lefts
+                .windows(2)
+                .all(|pair| (pair[0] - pair[1]).abs() < 1e-9)
+        );
 
-        let transaction =
-            distribute_nodes(&document, &ids, DistributeAxis::Horizontal, 10.0, "Distribute")
-                .unwrap();
+        let transaction = distribute_nodes(
+            &document,
+            &ids,
+            DistributeAxis::Horizontal,
+            10.0,
+            "Distribute",
+        )
+        .unwrap();
         apply_transaction(&mut document, &mut history, transaction).unwrap();
         let page = document.page(document.active_page_id()).unwrap();
         let mut rects: Vec<Rect> = ids

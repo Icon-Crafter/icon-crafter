@@ -175,7 +175,9 @@ pub struct VariableRegistry {
 impl VariableRegistry {
     /// Looks up a collection.
     pub fn collection(&self, id: CollectionId) -> Option<&VariableCollection> {
-        self.collections.iter().find(|collection| collection.id == id)
+        self.collections
+            .iter()
+            .find(|collection| collection.id == id)
     }
 
     /// Looks up a variable.
@@ -220,7 +222,11 @@ impl VariableRegistry {
         }
     }
 
-    fn value_for_mode<'a>(&self, variable: &'a Variable, mode: ModeId) -> Option<&'a VariableValue> {
+    fn value_for_mode<'a>(
+        &self,
+        variable: &'a Variable,
+        mode: ModeId,
+    ) -> Option<&'a VariableValue> {
         if let Some(value) = variable.values.get(&mode) {
             return Some(value);
         }
@@ -247,10 +253,13 @@ impl VariableRegistry {
     /// Ids of variables that directly alias another variable.
     pub fn aliases(&self) -> impl Iterator<Item = (&VariableId, VariableId)> {
         self.variables.iter().flat_map(|(id, variable)| {
-            variable.values.values().filter_map(move |value| match value {
-                VariableValue::Alias { variable_id } => Some((id, *variable_id)),
-                _ => None,
-            })
+            variable
+                .values
+                .values()
+                .filter_map(move |value| match value {
+                    VariableValue::Alias { variable_id } => Some((id, *variable_id)),
+                    _ => None,
+                })
         })
     }
 }
@@ -294,10 +303,16 @@ mod tests {
             registry.resolve_color(id, light).unwrap().to_hex(),
             "#ffffff"
         );
-        assert_eq!(registry.resolve_color(id, dark).unwrap().to_hex(), "#0b0d11");
+        assert_eq!(
+            registry.resolve_color(id, dark).unwrap().to_hex(),
+            "#0b0d11"
+        );
         // Unknown mode falls back to the collection default (light).
         assert_eq!(
-            registry.resolve_color(id, ModeId::new_v4()).unwrap().to_hex(),
+            registry
+                .resolve_color(id, ModeId::new_v4())
+                .unwrap()
+                .to_hex(),
             "#ffffff"
         );
     }

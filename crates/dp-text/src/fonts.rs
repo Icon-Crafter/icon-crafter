@@ -61,9 +61,7 @@ impl FontCatalog {
         }
         // Case-insensitive ordering keeps the layer font picker stable while
         // still presenting the canonical family names.
-        canonical = canonical
-            .into_iter()
-            .collect::<BTreeSet<_>>();
+        canonical = canonical.into_iter().collect::<BTreeSet<_>>();
         Self { canonical, index }
     }
 
@@ -84,7 +82,9 @@ impl FontCatalog {
 
     /// Case-insensitive lookup returning the canonical family name.
     pub fn canonical_name(&self, family: &str) -> Option<&str> {
-        self.index.get(&family.trim().to_lowercase()).map(String::as_str)
+        self.index
+            .get(&family.trim().to_lowercase())
+            .map(String::as_str)
     }
 
     /// Whether a family is installed (case-insensitive).
@@ -178,7 +178,10 @@ mod tests {
         let font_system = FontSystem::new();
         let catalog = FontCatalog::from_db(font_system.db());
         let default = catalog.default_family().expect("default family");
-        assert_eq!(catalog.canonical_name(&default.to_uppercase()).unwrap(), default);
+        assert_eq!(
+            catalog.canonical_name(&default.to_uppercase()).unwrap(),
+            default
+        );
         assert!(!catalog.resolve(default).fallback);
         let missing = catalog.resolve("Definitely Not A Font 9000");
         assert!(missing.fallback);

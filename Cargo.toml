@@ -15,6 +15,7 @@ default-members = [
     "crates/dp-render",
     "crates/dp-io",
     "crates/dp-persist",
+    "crates/dp-editor",
     "crates/dp-collab",
     "crates/dp-prototype",
     "crates/dp-devmode",
@@ -48,8 +49,13 @@ bitflags = { version = "2.13.2", features = ["serde"] }
 
 # Dev/CI profiles: a design tool needs responsive debug builds for document
 # operations, so optimise dependencies while keeping our own code debuggable.
+# Debug info and incremental compilation are disabled because this workspace
+# has a tight disk budget and the editor is exercised through tests, not a
+# debugger.
 [profile.dev]
 opt-level = 1
+debug = 0
+incremental = false
 
 [profile.dev.package."*"]
 opt-level = 2

@@ -363,7 +363,8 @@ impl Page {
                 match self.nodes.get(child) {
                     Some(child_node) => {
                         if child_node.parent != Some(*id) {
-                            issues.push(format!("child {child} does not point back to parent {id}"));
+                            issues
+                                .push(format!("child {child} does not point back to parent {id}"));
                         }
                     }
                     None => issues.push(format!("node {id} references missing child {child}")),
@@ -384,7 +385,11 @@ impl Page {
                     }
                 }
             }
-            if let Some(kind) = if node.kind == NodeKind::Text { Some(()) } else { None } {
+            if let Some(kind) = if node.kind == NodeKind::Text {
+                Some(())
+            } else {
+                None
+            } {
                 let _ = kind;
             }
         }
@@ -393,7 +398,9 @@ impl Page {
             let mut slow = Some(*id);
             let mut fast = Some(*id);
             loop {
-                slow = slow.and_then(|node| self.nodes.get(&node)).and_then(|node| node.parent);
+                slow = slow
+                    .and_then(|node| self.nodes.get(&node))
+                    .and_then(|node| node.parent);
                 fast = fast
                     .and_then(|node| self.nodes.get(&node))
                     .and_then(|node| node.parent)
@@ -509,7 +516,11 @@ mod tests {
         assert!(page.check_integrity().is_empty());
         page.get_mut(frame_id).unwrap().children.clear();
         let issues = page.check_integrity();
-        assert!(issues.iter().any(|issue| issue.contains("not listed by parent")));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.contains("not listed by parent"))
+        );
         assert!(page.get(rect_id).is_some());
     }
 }

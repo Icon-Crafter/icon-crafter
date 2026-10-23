@@ -168,12 +168,7 @@ pub fn validate(document: &Document) -> Vec<ValidationIssue> {
     issues
 }
 
-fn validate_node(
-    document: &Document,
-    path: &str,
-    node: &Node,
-    issues: &mut Vec<ValidationIssue>,
-) {
+fn validate_node(document: &Document, path: &str, node: &Node, issues: &mut Vec<ValidationIssue>) {
     if node.name.trim().is_empty() {
         warning(
             issues,
@@ -225,7 +220,10 @@ fn validate_node(
             issues,
             "opacity-out-of-range",
             path.to_string(),
-            format!("opacity {} is outside 0..1 and will be clamped", node.opacity),
+            format!(
+                "opacity {} is outside 0..1 and will be clamped",
+                node.opacity
+            ),
         );
     }
     validate_style(document, path, node, issues);
@@ -251,12 +249,7 @@ fn validate_node(
     }
 }
 
-fn validate_style(
-    document: &Document,
-    path: &str,
-    node: &Node,
-    issues: &mut Vec<ValidationIssue>,
-) {
+fn validate_style(document: &Document, path: &str, node: &Node, issues: &mut Vec<ValidationIssue>) {
     for (index, fill) in node.style.fills.iter().enumerate() {
         let fill_path = format!("{path}/style/fills[{index}]");
         if let Some(style_id) = fill.style_id {
@@ -344,8 +337,18 @@ fn validate_style(
             }
         }
         match effect {
-            Effect::DropShadow { blur, spread, offset, .. }
-            | Effect::InnerShadow { blur, spread, offset, .. } => {
+            Effect::DropShadow {
+                blur,
+                spread,
+                offset,
+                ..
+            }
+            | Effect::InnerShadow {
+                blur,
+                spread,
+                offset,
+                ..
+            } => {
                 if *blur < 0.0 || !blur.is_finite() {
                     warning(
                         issues,
@@ -399,11 +402,7 @@ fn validate_style(
     }
 }
 
-fn validate_geometry(
-    path: &str,
-    node: &Node,
-    issues: &mut Vec<ValidationIssue>,
-) {
+fn validate_geometry(path: &str, node: &Node, issues: &mut Vec<ValidationIssue>) {
     let Some(geometry) = &node.geometry else {
         return;
     };
@@ -442,9 +441,7 @@ fn validate_geometry(
                     );
                 }
                 for (anchor_index, anchor) in contour.anchors.iter().enumerate() {
-                    let finite = |point: dp_geom::Point| {
-                        point.x.is_finite() && point.y.is_finite()
-                    };
+                    let finite = |point: dp_geom::Point| point.x.is_finite() && point.y.is_finite();
                     if !finite(anchor.point)
                         || !finite(anchor.in_handle)
                         || !finite(anchor.out_handle)
@@ -452,7 +449,9 @@ fn validate_geometry(
                         error(
                             issues,
                             "non-finite-anchor",
-                            format!("{path}/geometry/contours[{contour_index}]/anchors[{anchor_index}]"),
+                            format!(
+                                "{path}/geometry/contours[{contour_index}]/anchors[{anchor_index}]"
+                            ),
                             "anchor or handle is not a number".to_string(),
                         );
                     }
@@ -503,12 +502,7 @@ fn validate_geometry(
     }
 }
 
-fn validate_text(
-    document: &Document,
-    path: &str,
-    node: &Node,
-    issues: &mut Vec<ValidationIssue>,
-) {
+fn validate_text(document: &Document, path: &str, node: &Node, issues: &mut Vec<ValidationIssue>) {
     let Some(text) = &node.text else {
         return;
     };
@@ -593,7 +587,10 @@ fn validate_text(
                 issues,
                 "text-on-path-not-vector",
                 format!("{path}/text/on_path"),
-                format!("text-path node {} is not a vector path", on_path.path_node_id),
+                format!(
+                    "text-path node {} is not a vector path",
+                    on_path.path_node_id
+                ),
             ),
             Some(_) => {}
         }
@@ -768,20 +765,12 @@ fn validate_prototype(
         }
         for action in &interaction.actions {
             match action {
-                Action::NavigateTo { frame_id, .. } => validate_frame_target(
-                    document,
-                    path,
-                    *frame_id,
-                    "navigate_to",
-                    issues,
-                ),
-                Action::OpenOverlay { frame_id, .. } => validate_frame_target(
-                    document,
-                    path,
-                    *frame_id,
-                    "open_overlay",
-                    issues,
-                ),
+                Action::NavigateTo { frame_id, .. } => {
+                    validate_frame_target(document, path, *frame_id, "navigate_to", issues)
+                }
+                Action::OpenOverlay { frame_id, .. } => {
+                    validate_frame_target(document, path, *frame_id, "open_overlay", issues)
+                }
                 Action::ScrollTo { .. } | Action::CloseOverlay | Action::Back => {}
                 Action::SetVariable { variable_id, .. } => {
                     if document.variables.variable(*variable_id).is_none() {
@@ -995,7 +984,11 @@ fn validate_variables(document: &Document, issues: &mut Vec<ValidationIssue>) {
     }
     for (id, variable) in &document.variables.variables {
         let path = format!("variables/{id}");
-        if document.variables.collection(variable.collection_id).is_none() {
+        if document
+            .variables
+            .collection(variable.collection_id)
+            .is_none()
+        {
             error(
                 issues,
                 "variable-collection-missing",
@@ -1125,11 +1118,7 @@ mod tests {
             .insert_node(node, None, None)
             .unwrap();
         let issues = validate(&document);
-        assert!(
-            issues
-                .iter()
-                .any(|issue| issue.code == "broken-instance")
-        );
+        assert!(issues.iter().any(|issue| issue.code == "broken-instance"));
     }
 
     #[test]

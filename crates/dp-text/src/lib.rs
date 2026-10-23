@@ -170,12 +170,7 @@ impl TextEngine {
         max_height: Option<f64>,
     ) -> TextLayout {
         (*self.layout_styled_shared(
-            characters,
-            style,
-            paragraph,
-            auto_size,
-            max_width,
-            max_height,
+            characters, style, paragraph, auto_size, max_width, max_height,
         ))
         .clone()
     }
@@ -263,6 +258,9 @@ impl TextEngine {
                 used_family: resolution.matched,
                 font_size,
                 line_height,
+                font_weight: style.font_weight,
+                italic: style.italic,
+                letter_spacing: style.letter_spacing,
             };
         }
 
@@ -386,6 +384,9 @@ impl TextEngine {
             used_family: resolution.matched,
             font_size,
             line_height,
+            font_weight: style.font_weight,
+            italic: style.italic,
+            letter_spacing: style.letter_spacing,
         }
     }
 

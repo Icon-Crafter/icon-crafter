@@ -13,16 +13,16 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::ModelError;
 use crate::color::Color;
 use crate::ids::{
-    AssetId, CollectionId, ComponentId, ComponentSetId, DocumentId, FlowId, ModeId, NodeId,
-    PageId, StyleId,
+    AssetId, CollectionId, ComponentId, ComponentSetId, DocumentId, FlowId, ModeId, NodeId, PageId,
+    StyleId,
 };
 use crate::node::{Node, NodeKind};
 use crate::page::Page;
 use crate::style::StyleRegistry;
 use crate::variables::VariableRegistry;
-use crate::ModelError;
 
 /// Current document schema version written by this build.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -170,7 +170,9 @@ impl ComponentRegistry {
 
     /// Finds the component registered for a node.
     pub fn component_for_node(&self, node_id: NodeId) -> Option<&ComponentMeta> {
-        self.components.values().find(|meta| meta.node_id == node_id)
+        self.components
+            .values()
+            .find(|meta| meta.node_id == node_id)
     }
 }
 
@@ -663,7 +665,11 @@ impl Document {
                 "document has no pages".to_string(),
             ));
         }
-        if !document.pages.iter().any(|page| page.id == document.active_page) {
+        if !document
+            .pages
+            .iter()
+            .any(|page| page.id == document.active_page)
+        {
             document.active_page = document.pages[0].id;
         }
         for page in &document.pages {
@@ -736,18 +742,13 @@ impl Document {
 
 /// Applies the migration chain for older schemas. Currently only v1 exists.
 fn migrate_to_current(value: &mut Value, from: u32) -> Result<(), ModelError> {
-    let schema = from;
-    while schema < SCHEMA_VERSION {
-        match schema {
-            // No v0 documents exist; reject rather than guess.
-            other => {
-                let _ = other;
-                return Err(ModelError::UnsupportedSchema {
-                    found: from,
-                    supported: SCHEMA_VERSION,
-                });
-            }
-        }
+    // v1 is the first schema; older documents cannot be migrated safely, so we
+    // reject them instead of guessing at missing properties.
+    if from < SCHEMA_VERSION {
+        return Err(ModelError::UnsupportedSchema {
+            found: from,
+            supported: SCHEMA_VERSION,
+        });
     }
     let object = value
         .as_object_mut()
@@ -813,7 +814,10 @@ mod tests {
         let mut value = document.to_json_value().unwrap();
         value["schema"] = Value::from(999u32);
         let error = Document::from_json_value(value).unwrap_err();
-        assert!(matches!(error, ModelError::UnsupportedSchema { found: 999, .. }));
+        assert!(matches!(
+            error,
+            ModelError::UnsupportedSchema { found: 999, .. }
+        ));
     }
 
     #[test]
@@ -855,7 +859,10 @@ mod tests {
         let rect = Node::rectangle("On second page", 0.0, 0.0, 10.0, 10.0);
         let rect_id = rect.id;
         page.insert_node(rect, None, None).unwrap();
-        assert_eq!(document.page_containing(frame_id), Some(document.active_page_id()));
+        assert_eq!(
+            document.page_containing(frame_id),
+            Some(document.active_page_id())
+        );
         assert_eq!(document.page_containing(rect_id), Some(second));
         {
             let node = document.node_mut(rect_id).unwrap();
@@ -878,11 +885,15 @@ mod tests {
     fn document_roundtrip_with_geometry_and_kind() {
         let mut document = Document::new_with_kind("Site", DocKind::Site);
         let page_id = document.active_page_id();
-        let star = Node::new(NodeKind::Star, "Star", Transform::new(0.0, 0.0, 100.0, 100.0))
-            .with_geometry(crate::geometry::NodeGeometry::Star {
-                point_count: 5,
-                inner_ratio: 0.38,
-            });
+        let star = Node::new(
+            NodeKind::Star,
+            "Star",
+            Transform::new(0.0, 0.0, 100.0, 100.0),
+        )
+        .with_geometry(crate::geometry::NodeGeometry::Star {
+            point_count: 5,
+            inner_ratio: 0.38,
+        });
         document
             .page_mut(page_id)
             .unwrap()

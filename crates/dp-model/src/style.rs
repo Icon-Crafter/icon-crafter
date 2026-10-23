@@ -4,9 +4,9 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::geometry::FillRule;
+use crate::geometry::TextStyle;
 use crate::ids::StyleId;
 use crate::paint::{Effect, Fill, LineCap, LineJoin, Paint, Stroke, StrokeAlign};
-use crate::geometry::TextStyle;
 use dp_geom::CornerRadii;
 
 /// Everything needed to paint a node's surface.
@@ -63,7 +63,11 @@ impl NodeStyle {
     }
 
     /// A style with one solid fill and one solid stroke of the given width.
-    pub fn outlined(fill: crate::color::Color, stroke: crate::color::Color, weight: f64) -> NodeStyle {
+    pub fn outlined(
+        fill: crate::color::Color,
+        stroke: crate::color::Color,
+        weight: f64,
+    ) -> NodeStyle {
         let mut stroke = Stroke::solid(stroke);
         stroke.weight = weight;
         NodeStyle {
@@ -85,7 +89,9 @@ impl NodeStyle {
 
     /// Returns `true` when nothing would be painted except children.
     pub fn is_visually_empty(&self) -> bool {
-        self.fills.iter().all(|fill| !fill.visible || fill.paint.is_invisible())
+        self.fills
+            .iter()
+            .all(|fill| !fill.visible || fill.paint.is_invisible())
             && self.strokes.iter().all(|stroke| !stroke.visible)
             && self.effects.is_empty()
     }
@@ -93,7 +99,10 @@ impl NodeStyle {
     /// Whether any paint references the given style id.
     pub fn uses_style(&self, style: StyleId) -> bool {
         self.fills.iter().any(|fill| fill.style_id == Some(style))
-            || self.strokes.iter().any(|stroke| stroke.style_id == Some(style))
+            || self
+                .strokes
+                .iter()
+                .any(|stroke| stroke.style_id == Some(style))
     }
 }
 
@@ -166,7 +175,9 @@ impl StyleRegistry {
 
     /// Whether an id resolves to any style kind.
     pub fn contains(&self, id: StyleId) -> bool {
-        self.paints.contains_key(&id) || self.texts.contains_key(&id) || self.effects.contains_key(&id)
+        self.paints.contains_key(&id)
+            || self.texts.contains_key(&id)
+            || self.effects.contains_key(&id)
     }
 
     /// Looks up a paint style.

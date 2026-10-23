@@ -216,7 +216,10 @@ mod tests {
     use crate::types::{Mat2D, Rect};
 
     fn assert_close(a: f64, b: f64, tolerance: f64) {
-        assert!((a - b).abs() <= tolerance, "{a} != {b} (tolerance {tolerance})");
+        assert!(
+            (a - b).abs() <= tolerance,
+            "{a} != {b} (tolerance {tolerance})"
+        );
     }
 
     #[test]

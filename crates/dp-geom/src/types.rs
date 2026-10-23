@@ -904,7 +904,10 @@ mod tests {
         assert_eq!(Point::ZERO.normalized(), None);
         approx(Point::new(1.0, 0.0).dot(Point::new(0.0, 1.0)), 0.0);
         approx(Point::new(1.0, 0.0).cross(Point::new(0.0, 1.0)), 1.0);
-        approx_point(Point::new(0.0, 0.0).lerp(Point::new(10.0, 20.0), 0.5), Point::new(5.0, 10.0));
+        approx_point(
+            Point::new(0.0, 0.0).lerp(Point::new(10.0, 20.0), 0.5),
+            Point::new(5.0, 10.0),
+        );
         approx_point(
             Point::new(1.0, 0.0).rotate_about(Point::ZERO, std::f64::consts::FRAC_PI_2),
             Point::new(0.0, 1.0),
@@ -929,7 +932,10 @@ mod tests {
         assert_eq!(r.union(other), Rect::from_ltrb(10.0, 20.0, 55.0, 70.0));
         assert!(r.overlaps(other));
         assert!(!r.overlaps(Rect::new(100.0, 100.0, 1.0, 1.0)));
-        assert_eq!(Rect::from_points(Point::new(5.0, 5.0), Point::new(1.0, 2.0)).size(), Size::new(4.0, 3.0));
+        assert_eq!(
+            Rect::from_points(Point::new(5.0, 5.0), Point::new(1.0, 2.0)).size(),
+            Size::new(4.0, 3.0)
+        );
         assert!(r.intersects_segment(Point::new(0.0, 0.0), Point::new(100.0, 100.0)));
         assert!(!r.intersects_segment(Point::new(0.0, 0.0), Point::new(0.0, 10.0)));
     }
@@ -949,8 +955,9 @@ mod tests {
         let p = Point::new(1.0, 1.0);
         let got = m.apply_point(p);
         // Apply translation, then scale, then rotation.
-        let expected = Mat2D::rotation(std::f64::consts::FRAC_PI_2)
-            .apply_point(Mat2D::scale(2.0, 3.0).apply_point(Mat2D::translation(10.0, 20.0).apply_point(p)));
+        let expected = Mat2D::rotation(std::f64::consts::FRAC_PI_2).apply_point(
+            Mat2D::scale(2.0, 3.0).apply_point(Mat2D::translation(10.0, 20.0).apply_point(p)),
+        );
         approx_point(got, expected);
         let inv = m.inverse().unwrap();
         approx_point(inv.apply_point(got), p);

@@ -12,7 +12,7 @@
 //! produced them. The engine keeps the layout in-process and exposes glyphs for
 //! rasterization through [`crate::TextEngine::rasterize_glyph`].
 
-use cosmic_text::{fontdb, CacheKeyFlags};
+use cosmic_text::{CacheKeyFlags, fontdb};
 
 /// One shaped glyph inside a line.
 #[derive(Clone, Debug, PartialEq)]
@@ -99,6 +99,12 @@ pub struct TextLayout {
     pub font_size: f32,
     /// Line height used for metrics.
     pub line_height: f32,
+    /// Weight requested by the text style.
+    pub font_weight: u16,
+    /// Whether italic was requested.
+    pub italic: bool,
+    /// Letter spacing in document units.
+    pub letter_spacing: f64,
 }
 
 impl TextLayout {
@@ -114,6 +120,9 @@ impl TextLayout {
             used_family: None,
             font_size: 0.0,
             line_height: 0.0,
+            font_weight: 400,
+            italic: false,
+            letter_spacing: 0.0,
         }
     }
 

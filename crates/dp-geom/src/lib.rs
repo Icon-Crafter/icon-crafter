@@ -20,16 +20,14 @@ pub mod snap;
 pub mod spatial;
 pub mod types;
 
-pub use boolean::{boolean_op, boolean_op_with_tolerance, BooleanError, BooleanOp};
+pub use boolean::{BooleanError, BooleanOp, boolean_op, boolean_op_with_tolerance};
 pub use path::{
-    polygon_crossings, polygon_winding, signed_polygon_area, simplify_collinear, Anchor, Contour,
-    FillRule, PathSegment, VectorPath,
+    Anchor, Contour, FillRule, PathSegment, VectorPath, polygon_crossings, polygon_winding,
+    signed_polygon_area, simplify_collinear,
 };
 pub use shapes::{ellipse_path, line_path, polygon_path, rectangle_path, star_path};
 pub use snap::{
-    snap_point, snap_rect, Axis, Guide, GridSpec, SnapKind, SnapLine, SnapOptions, SnapResult,
+    Axis, GridSpec, Guide, SnapKind, SnapLine, SnapOptions, SnapResult, snap_point, snap_rect,
 };
 pub use spatial::SpatialGrid;
-pub use types::{
-    CornerRadii, Insets, Mat2D, Point, Rect, Size, EPSILON,
-};
+pub use types::{CornerRadii, EPSILON, Insets, Mat2D, Point, Rect, Size};

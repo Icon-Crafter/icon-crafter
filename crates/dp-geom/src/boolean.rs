@@ -15,7 +15,7 @@ use i_overlay::float::single::SingleFloatOverlay;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::path::{simplify_collinear, Anchor, Contour, FillRule, VectorPath};
+use crate::path::{Anchor, Contour, FillRule, VectorPath, simplify_collinear};
 
 /// Default flattening tolerance (world units) for boolean operations.
 pub const DEFAULT_BOOLEAN_TOLERANCE: f64 = 0.02;
@@ -98,9 +98,9 @@ pub fn boolean_op_with_tolerance(
 
 fn paths_are_finite(path: &VectorPath) -> bool {
     path.contours.iter().all(|c| {
-        c.anchors.iter().all(|a| {
-            a.point.is_finite() && a.in_handle.is_finite() && a.out_handle.is_finite()
-        })
+        c.anchors
+            .iter()
+            .all(|a| a.point.is_finite() && a.in_handle.is_finite() && a.out_handle.is_finite())
     })
 }
 
@@ -161,8 +161,15 @@ mod tests {
         let a = rect(0.0, 0.0, 10.0, 10.0);
         let b = rect(5.0, 0.0, 10.0, 10.0);
         let result = boolean_op(&a, &b, BooleanOp::Union, FillRule::NonZero).unwrap();
-        assert!((result.area() - 150.0).abs() < 1e-6, "area {}", result.area());
-        assert_eq!(result.bounds().unwrap(), crate::types::Rect::new(0.0, 0.0, 15.0, 10.0));
+        assert!(
+            (result.area() - 150.0).abs() < 1e-6,
+            "area {}",
+            result.area()
+        );
+        assert_eq!(
+            result.bounds().unwrap(),
+            crate::types::Rect::new(0.0, 0.0, 15.0, 10.0)
+        );
     }
 
     #[test]
@@ -170,7 +177,11 @@ mod tests {
         let a = rect(0.0, 0.0, 10.0, 10.0);
         let b = rect(2.5, 2.5, 5.0, 5.0);
         let result = boolean_op(&a, &b, BooleanOp::Subtract, FillRule::NonZero).unwrap();
-        assert!((result.area() - 75.0).abs() < 1e-6, "area {}", result.area());
+        assert!(
+            (result.area() - 75.0).abs() < 1e-6,
+            "area {}",
+            result.area()
+        );
         assert_eq!(result.contours.len(), 2, "outer contour plus hole");
         assert!(!result.contains(Point::new(5.0, 5.0), FillRule::NonZero));
         assert!(result.contains(Point::new(1.0, 1.0), FillRule::NonZero));
@@ -190,7 +201,8 @@ mod tests {
     fn booleans_with_curves_are_approximated() {
         let ellipse = ellipse_path(Size::new(100.0, 100.0));
         let square = rect(50.0, 0.0, 100.0, 100.0);
-        let result = boolean_op(&ellipse, &square, BooleanOp::Intersect, FillRule::NonZero).unwrap();
+        let result =
+            boolean_op(&ellipse, &square, BooleanOp::Intersect, FillRule::NonZero).unwrap();
         let area = result.area();
         // Half a circle of radius 50 is 3926.99; flattening tolerance 0.02 is
         // accurate to a fraction of a unit.

@@ -221,7 +221,8 @@ impl Transform {
 
     /// Axis aligned bounds in parent space after rotation.
     pub fn bounds(&self) -> Rect {
-        self.matrix().apply_rect(Rect::new(0.0, 0.0, self.w, self.h))
+        self.matrix()
+            .apply_rect(Rect::new(0.0, 0.0, self.w, self.h))
     }
 
     /// Whether the transform contains only finite values.
@@ -375,7 +376,12 @@ impl Node {
     }
 
     /// Creates a node with an explicit id (used by importers and tests).
-    pub fn with_id(id: NodeId, kind: NodeKind, name: impl Into<String>, transform: Transform) -> Node {
+    pub fn with_id(
+        id: NodeId,
+        kind: NodeKind,
+        name: impl Into<String>,
+        transform: Transform,
+    ) -> Node {
         Node {
             id,
             ..Node::new(kind, name, transform)
@@ -487,7 +493,8 @@ mod tests {
     fn node_serde_roundtrip() {
         let mut node = Node::rectangle("Card", 10.0, 20.0, 200.0, 120.0);
         node.style = crate::style::NodeStyle::filled(crate::color::Color::WHITE);
-        node.props.insert("data-id".into(), serde_json::json!("card-1"));
+        node.props
+            .insert("data-id".into(), serde_json::json!("card-1"));
         let json = serde_json::to_value(&node).unwrap();
         assert_eq!(json["kind"], "rectangle");
         assert_eq!(json["transform"]["w"], 200.0);

@@ -7,13 +7,14 @@ license.workspace = true
 description = "Rendering engine: display list, scene builder, viewport culling, batching, CPU rasterizer for deterministic export, wgpu GPU backend"
 
 [features]
-default = ["gpu"]
+default = []
 gpu = ["dep:wgpu", "dep:pollster"]
 
 [dependencies]
 dp-model = { path = "../dp-model" }
 dp-geom = { path = "../dp-geom" }
 dp-text = { path = "../dp-text" }
+dp-layout = { path = "../dp-layout" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

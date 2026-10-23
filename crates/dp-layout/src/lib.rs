@@ -210,7 +210,10 @@ impl<'a> Solver<'a> {
         depth: usize,
     ) -> Size {
         if depth > MAX_LAYOUT_DEPTH {
-            tracing::warn!(?id, "layout recursion depth exceeded; treating node as empty");
+            tracing::warn!(
+                ?id,
+                "layout recursion depth exceeded; treating node as empty"
+            );
             return Size::zero();
         }
         if avail_width.is_none() {
@@ -483,7 +486,11 @@ impl<'a> Solver<'a> {
             let free = (inner_main - row.main).max(0.0);
             let n = row.indices.len();
             let space_between = layout.primary_align == PrimaryAlign::SpaceBetween && n > 1;
-            let extra_gap = if space_between { free / (n - 1) as f64 } else { 0.0 };
+            let extra_gap = if space_between {
+                free / (n - 1) as f64
+            } else {
+                0.0
+            };
             let start = if space_between {
                 0.0
             } else {
@@ -695,10 +702,7 @@ impl NodeLayout {
             return false;
         };
         let local = inverse.apply_point(point);
-        local.x >= 0.0
-            && local.y >= 0.0
-            && local.x <= self.size.w
-            && local.y <= self.size.h
+        local.x >= 0.0 && local.y >= 0.0 && local.x <= self.size.w && local.y <= self.size.h
     }
 }
 
@@ -824,7 +828,11 @@ mod tests {
         let inner_id = add(&mut page, inner, Some(outer_id));
         let a = add(&mut page, rect("a", 0.0, 0.0, 10.0, 10.0), Some(inner_id));
         let b = add(&mut page, rect("b", 0.0, 0.0, 10.0, 10.0), Some(inner_id));
-        let sibling = add(&mut page, rect("sibling", 0.0, 0.0, 20.0, 20.0), Some(outer_id));
+        let sibling = add(
+            &mut page,
+            rect("sibling", 0.0, 0.0, 20.0, 20.0),
+            Some(outer_id),
+        );
 
         let map = engine().compute_page(&page);
         assert_eq!(map.size(inner_id), Some(Size::new(10.0, 24.0)));
@@ -892,11 +900,7 @@ mod tests {
     #[test]
     fn group_hugs_union_of_children() {
         let mut page = Page::new("Page");
-        let group = Node::new(
-            NodeKind::Group,
-            "Group",
-            Transform::new(0.0, 0.0, 0.0, 0.0),
-        );
+        let group = Node::new(NodeKind::Group, "Group", Transform::new(0.0, 0.0, 0.0, 0.0));
         let group_id = add(&mut page, group, None);
         let a = add(&mut page, rect("a", 10.0, 20.0, 30.0, 30.0), Some(group_id));
         let b = add(&mut page, rect("b", 50.0, 0.0, 10.0, 10.0), Some(group_id));
@@ -934,7 +938,11 @@ mod tests {
         layout.sizing = Sizing::HUG;
         let frame = Node::frame("Column", 0.0, 0.0, 0.0, 0.0).with_layout(layout);
         let frame_id = add(&mut page, frame, None);
-        let first = add(&mut page, rect("first", 0.0, 0.0, 10.0, 10.0), Some(frame_id));
+        let first = add(
+            &mut page,
+            rect("first", 0.0, 0.0, 10.0, 10.0),
+            Some(frame_id),
+        );
         let mut hidden = rect("hidden", 0.0, 0.0, 10.0, 30.0);
         hidden.visible = false;
         add(&mut page, hidden, Some(frame_id));

@@ -207,7 +207,11 @@ mod tests {
     #[test]
     fn css_format() {
         assert_eq!(Color::rgb(1.0, 0.0, 0.0).to_css(), "rgb(255, 0, 0)");
-        assert!(Color::new(0.0, 0.0, 0.0, 0.5).to_css().starts_with("rgba(0, 0, 0, 0.502"));
+        assert!(
+            Color::new(0.0, 0.0, 0.0, 0.5)
+                .to_css()
+                .starts_with("rgba(0, 0, 0, 0.502")
+        );
     }
 
     #[test]

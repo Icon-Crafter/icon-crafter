@@ -51,3 +51,29 @@ Run `pnpm --dir apps/ui build` then `cargo run -p iconcrafter-desktop` (or `pnpm
 10. Very large document (10k nodes): pan/drag remains usable; report frame timings.
 
 Record pass/fail and timings in `DEVELOPMENT-LOG.md` for each release candidate.
+
+## Session 3 verification (engine vertical slice)
+
+Run these before touching the engine or the IPC contract:
+
+```powershell
+cargo test -p dp-geom                                   # 44 passed
+cargo test -p dp-model                                  # 65 passed
+cargo test -p dp-text                                   # 13 passed
+cargo test -p dp-layout                                 # 12 passed
+cargo test -p dp-render --no-default-features           # 6 + 11 passed
+cargo test -p dp-io --no-default-features               # 9 passed
+cargo test -p dp-persist                                # 13 passed
+cargo test -p dp-editor --no-default-features           # 19 passed
+cargo check -p iconcrafter-desktop                      # IPC compiles
+cargo fmt --all -- --check
+```
+
+Notes:
+
+* Heavy crates (desktop/server) are excluded from the default build to keep `C:` space
+  under control; build them explicitly with `-p`.
+* The dev profile uses `debug = 0` and `incremental = false` (root `Cargo.toml`) because
+  debug artifacts exhausted the 19 GB free disk. Do not re-enable incremental blindly.
+* `apps/ui/dist` may temporarily be a placeholder until `pnpm --dir apps/ui build` succeeds;
+  a placeholder is enough for `cargo check -p iconcrafter-desktop` but not for a real app run.

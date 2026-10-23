@@ -37,6 +37,7 @@ dp-text = { path = "../../crates/dp-text" }
 dp-render = { path = "../../crates/dp-render" }
 dp-io = { path = "../../crates/dp-io" }
 dp-persist = { path = "../../crates/dp-persist" }
+dp-editor = { path = "../../crates/dp-editor" }
 dp-collab = { path = "../../crates/dp-collab" }
 dp-prototype = { path = "../../crates/dp-prototype" }
 dp-devmode = { path = "../../crates/dp-devmode" }

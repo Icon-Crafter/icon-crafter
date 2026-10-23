@@ -12,7 +12,7 @@ use std::f64::consts::TAU;
 
 use serde::{Deserialize, Serialize};
 
-use crate::types::{Mat2D, Point, Rect, EPSILON};
+use crate::types::{EPSILON, Mat2D, Point, Rect};
 
 /// The fill rule used to decide whether a point is inside a path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -292,7 +292,11 @@ impl Contour {
                 }
             }
             for p in pts.into_iter().skip(1) {
-                if out.last().map(|last| last.distance_sq(p) <= EPSILON * EPSILON) != Some(true) {
+                if out
+                    .last()
+                    .map(|last| last.distance_sq(p) <= EPSILON * EPSILON)
+                    != Some(true)
+                {
                     out.push(p);
                 }
             }
@@ -650,10 +654,7 @@ impl VectorPath {
                 best = best.min(point.distance_to_segment(window[0], window[1]));
             }
             if contour.closed && points.len() >= 2 {
-                best = best.min(point.distance_to_segment(
-                    points[points.len() - 1],
-                    points[0],
-                ));
+                best = best.min(point.distance_to_segment(points[points.len() - 1], points[0]));
             }
         }
         best
@@ -973,8 +974,18 @@ mod tests {
         assert!(path.contains(Point::new(5.0, 5.0), FillRule::NonZero));
         assert!(!path.contains(Point::new(15.0, 5.0), FillRule::NonZero));
         // A ring: outer clockwise, inner counter-clockwise -> hole with non-zero.
-        let outer = [Point::new(0.0, 0.0), Point::new(10.0, 0.0), Point::new(10.0, 10.0), Point::new(0.0, 10.0)];
-        let inner = [Point::new(3.0, 3.0), Point::new(3.0, 7.0), Point::new(7.0, 7.0), Point::new(7.0, 3.0)];
+        let outer = [
+            Point::new(0.0, 0.0),
+            Point::new(10.0, 0.0),
+            Point::new(10.0, 10.0),
+            Point::new(0.0, 10.0),
+        ];
+        let inner = [
+            Point::new(3.0, 3.0),
+            Point::new(3.0, 7.0),
+            Point::new(7.0, 7.0),
+            Point::new(7.0, 3.0),
+        ];
         let ring = VectorPath {
             contours: vec![Contour::polygon(outer), Contour::polygon(inner)],
         };

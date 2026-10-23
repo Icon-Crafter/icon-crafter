@@ -9,13 +9,13 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
+use crate::ModelError;
 use crate::document::Document;
 use crate::geometry::{AutoLayout, Constraints, NodeGeometry, TextContent};
 use crate::ids::{NodeId, PageId};
 use crate::node::{ComponentRole, Node, PrototypeNode, Transform};
 use crate::paint::BlendMode;
 use crate::style::NodeStyle;
-use crate::ModelError;
 
 /// A partial update to a node's properties.
 ///
@@ -294,12 +294,16 @@ impl Edit {
                 parent,
                 index,
             } => {
-                let page = document.page_mut(*page).ok_or(ModelError::PageNotFound(*page))?;
+                let page = document
+                    .page_mut(*page)
+                    .ok_or(ModelError::PageNotFound(*page))?;
                 page.insert_node(node.clone(), *parent, Some(*index))?;
                 Ok(())
             }
             Edit::RemoveNode { page, node, .. } => {
-                let page = document.page_mut(*page).ok_or(ModelError::PageNotFound(*page))?;
+                let page = document
+                    .page_mut(*page)
+                    .ok_or(ModelError::PageNotFound(*page))?;
                 page.remove_node(node.id)
                     .map(|_| ())
                     .ok_or(ModelError::NodeNotFound(node.id))
@@ -311,7 +315,9 @@ impl Edit {
                 new_index,
                 ..
             } => {
-                let page = document.page_mut(*page).ok_or(ModelError::PageNotFound(*page))?;
+                let page = document
+                    .page_mut(*page)
+                    .ok_or(ModelError::PageNotFound(*page))?;
                 page.reorder(*node_id, *new_parent, Some(*new_index))?;
                 Ok(())
             }
@@ -329,7 +335,9 @@ impl Edit {
                 Ok(())
             }
             Edit::InsertNode { page, node, .. } => {
-                let page = document.page_mut(*page).ok_or(ModelError::PageNotFound(*page))?;
+                let page = document
+                    .page_mut(*page)
+                    .ok_or(ModelError::PageNotFound(*page))?;
                 page.remove_node(node.id)
                     .map(|_| ())
                     .ok_or(ModelError::NodeNotFound(node.id))
@@ -340,7 +348,9 @@ impl Edit {
                 parent,
                 index,
             } => {
-                let page = document.page_mut(*page).ok_or(ModelError::PageNotFound(*page))?;
+                let page = document
+                    .page_mut(*page)
+                    .ok_or(ModelError::PageNotFound(*page))?;
                 page.insert_node(node.clone(), *parent, Some(*index))?;
                 Ok(())
             }
@@ -351,7 +361,9 @@ impl Edit {
                 old_index,
                 ..
             } => {
-                let page = document.page_mut(*page).ok_or(ModelError::PageNotFound(*page))?;
+                let page = document
+                    .page_mut(*page)
+                    .ok_or(ModelError::PageNotFound(*page))?;
                 page.reorder(*node_id, *old_parent, Some(*old_index))?;
                 Ok(())
             }
@@ -590,7 +602,8 @@ mod tests {
         let mut after = before.clone();
         after.opacity = 0.25;
         after.name = "Patched".to_string();
-        let mut tx = Transaction::new("Change opacity").with_selection(vec![rect_id], vec![rect_id]);
+        let mut tx =
+            Transaction::new("Change opacity").with_selection(vec![rect_id], vec![rect_id]);
         tx.push(Edit::SetNode {
             page: document.active_page_id(),
             before,

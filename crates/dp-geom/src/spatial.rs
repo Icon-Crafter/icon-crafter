@@ -252,7 +252,12 @@ mod tests {
         for i in 0..100u32 {
             grid.insert(i, Rect::new(i as f64 * 10.0, 0.0, 5.0, 5.0));
         }
-        let all = grid.query(Rect::new(-1_000_000.0, -1_000_000.0, 2_000_000.0, 2_000_000.0));
+        let all = grid.query(Rect::new(
+            -1_000_000.0,
+            -1_000_000.0,
+            2_000_000.0,
+            2_000_000.0,
+        ));
         assert_eq!(all.len(), 100);
     }
 

@@ -32,22 +32,24 @@ pub mod variables;
 pub use color::Color;
 pub use document::{
     AssetRegistry, ComponentMeta, ComponentRegistry, ComponentSetMeta, DocKind, Document,
-    DocumentSettings, FontAssetMeta, GridSettings, ImageAssetMeta, PrototypeFlow, PrototypeSettings,
-    SCHEMA_VERSION,
+    DocumentSettings, FontAssetMeta, GridSettings, ImageAssetMeta, PrototypeFlow,
+    PrototypeSettings, SCHEMA_VERSION,
 };
 pub use geometry::{
-    AutoLayout, AutoSize, Constraints, CounterAlign, FillRule, HorizontalConstraint, LayoutDirection,
-    LineHeight, LineHeightUnit, NodeGeometry, PathSide, PrimaryAlign, SizeSpec, Sizing, TextAlign,
-    TextCase, TextContent, TextDecoration, TextOnPath, TextParagraph, TextStyle, VerticalAlign,
+    AutoLayout, AutoSize, Constraints, CounterAlign, FillRule, HorizontalConstraint,
+    LayoutDirection, LineHeight, LineHeightUnit, NodeGeometry, PathSide, PrimaryAlign, SizeSpec,
+    Sizing, TextAlign, TextCase, TextContent, TextDecoration, TextOnPath, TextParagraph, TextStyle,
+    VerticalAlign,
 };
 pub use ids::{
-    AssetId, CollectionId, ComponentId, ComponentSetId, DocumentId, EntityId, FlowId, InteractionId,
-    ModeId, NodeId, PageId, StyleId, VariableId,
+    AssetId, CollectionId, ComponentId, ComponentSetId, DocumentId, EntityId, FlowId,
+    InteractionId, ModeId, NodeId, PageId, StyleId, VariableId,
 };
 pub use node::{ComponentRole, InstanceOverride, Node, NodeKind, PrototypeNode, Transform};
 pub use ops::{
-    align_nodes, apply_transaction, boolean_nodes, delete_nodes, distribute_nodes, duplicate_nodes,
-    group_nodes, insert_nodes, nudge, patch_nodes, reorder, ungroup, Align, DistributeAxis,
+    Align, DistributeAxis, align_nodes, apply_transaction, boolean_nodes, delete_nodes,
+    distribute_nodes, duplicate_nodes, group_nodes, insert_nodes, nudge, patch_nodes, reorder,
+    ungroup,
 };
 pub use page::{Page, PageError};
 pub use paint::{
@@ -59,7 +61,7 @@ pub use prototype::{
 };
 pub use style::{NodeStyle, SharedEffectStyle, SharedPaintStyle, SharedTextStyle, StyleRegistry};
 pub use transactions::{Edit, History, NodePatch, Transaction};
-pub use validation::{has_errors, validate, ValidationIssue, ValidationSeverity};
+pub use validation::{ValidationIssue, ValidationSeverity, has_errors, validate};
 pub use variables::{Variable, VariableCollection, VariableRegistry, VariableType, VariableValue};
 
 pub use dp_geom;

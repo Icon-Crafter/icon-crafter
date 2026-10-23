@@ -7,48 +7,53 @@ tested) · **verified** (verified end-to-end in the running app) · **blocked** 
 Rule: a feature is never marked implemented/verified because a button exists. Each row
 names the verification evidence in the development log or a test.
 
-Last updated: session 2 (engine foundation: dp-geom + dp-model, UI shell, backend started).
+Last updated: session 3 (engine vertical slice complete and green; desktop IPC compiles; backend delivered and unit-tested; frontend milestone 2 in flight).
 
 ## Foundation
 
 | # | Feature | Status | Evidence / notes |
 |---|---|---|---|
-| F1 | Rust workspace (14 members), pinned toolchain, shared profiles | verified | `cargo metadata --no-deps`, initial commit |
-| F2 | Tauri desktop shell + config + capabilities + icons | implemented | builds once UI exists; window not yet launched |
-| F3 | Axum backend skeleton | in-progress | server teammate building real auth/teams/files/comments/versions/WS (backend-api) |
-| F4 | Docker compose for Postgres/MinIO/Redis | planned | Docker is not installed on the dev host; documented gap |
+| F1 | Rust workspace (15 members incl. dp-editor), pinned toolchain, shared profiles | verified | `cargo metadata --no-deps`, commits a1765cb/1a6725a/8013f97 |
+| F2 | Tauri desktop shell + config + capabilities + icons | implemented | `cargo check -p iconcrafter-desktop` passes with the full IPC layer; app launch verification pending the real UI bundle |
+| F3 | Axum backend: auth/teams/projects/files/comments/versions/shares/assets/publish/WS | limited | unit tests 132 passed + clippy/fmt clean before disk incident; PostgreSQL integration tests not run (Docker missing); rerun queued |
+| F4 | Docker compose for Postgres/MinIO/Redis | limited | `docker-compose.yml` + Dockerfile written and reviewed; never executed because Docker is not installed on the dev host |
 | F5 | Architecture, document format, collaboration protocol docs | implemented | `docs/ARCHITECTURE.md`, `DOCUMENT-FORMAT.md`, `COLLAB-PROTOCOL.md` |
-| F6 | Contract + design system docs | implemented | `docs/CONTRACT.md`, `DESIGN-SYSTEM.md` |
+| F6 | Contract + design system docs | implemented | `docs/CONTRACT.md` (§8 implementation notes), `DESIGN-SYSTEM.md` |
 | F7 | CI-ready commands documented (fmt/clippy/test/build) | implemented | `docs/TESTING.md`, root README |
 | F8 | Feature checklist / dev log / release checklist | implemented | this file + `DEVELOPMENT-LOG.md`, `RELEASE-CHECKLIST.md` |
 | F9 | `dp-geom`: transforms, Bezier paths, primitives, booleans, spatial index, snapping | verified | `cargo test -p dp-geom` → 44 passed (2026-10-23) |
 | F10 | `dp-model`: document model, styles, variables, components, prototype model, transactions/undo, command ops, validation, canonical schema-v1 JSON | verified | `cargo test -p dp-model` → 65 passed (2026-10-23) |
 | F11 | `dp-text`: system font catalog + missing-font detection, cosmic-text shaping, wrapping/max-lines, glyph runs and rasterization, layout cache | verified | `cargo test -p dp-text` → 13 passed (2026-10-23) |
 | F12 | `dp-layout`: deterministic auto layout (hug/fill/fixed, gap/padding, alignment, wrap, item-reverse, min/max, nested, text-driven hug) | verified | `cargo test -p dp-layout` → 12 passed (2026-10-23) |
+| F13 | `dp-render`: display list + scene builder + culling + tiny-skia CPU rasterizer + PNG encoding (wgpu declared, not implemented) | verified | `cargo test -p dp-render` → 6 + 11 passed (2026-10-23); wgpu backend honestly absent |
+| F14 | `dp-io`: SVG export/import (editable vectors), PNG/JPEG raster export with scale, PDF export | verified | `cargo test -p dp-io` → 9 passed (2026-10-23) |
+| F15 | `dp-persist`: `.icraft` container, atomic save, recovery journal, schema validation | verified | `cargo test -p dp-persist` → 13 passed (2026-10-23) |
+| F16 | `dp-editor`: state machine, tools/selection/drags, snapping, commands, text sessions, undo, render/overlay, save/open/export | verified | `cargo test -p dp-editor` → 19 passed (2026-10-23) |
+| F17 | Desktop IPC layer (Tauri commands = contract) | implemented | `cargo check -p iconcrafter-desktop` passes; end-to-end launch pending UI milestone 2 |
 
 ## Design editor — Phase 3 vertical slice
 
 | # | Feature | Status | Evidence / notes |
 |---|---|---|---|
-| E1 | Infinite canvas: zoom/pan (wheel, trackpad, space+drag, middle mouse) | planned | |
-| E2 | Zoom to selection / fit / 100% / selection info | planned | |
-| E3 | Frames, groups, rectangles, ellipses, lines, polygons, stars | planned | |
-| E4 | Text creation + on-canvas editing | planned | |
-| E5 | Vector paths + pen tool | planned | |
-| E6 | Selection: click, shift-click, marquee, deep select, lock/hide respect | planned | |
-| E7 | Move, resize with handles, rotate, nudge, snap to objects/grid/guides | planned | |
-| E8 | Copy/paste/duplicate/cut/clipboard | planned | |
-| E9 | Group/ungroup, reorder, z-order commands, lock/hide | planned | |
-| E10 | Layers panel with tree, rename, drag reorder, search | planned | |
-| E11 | Pages management | planned | |
-| E12 | Property inspector: transform, size, rotation, opacity, blend, fills, strokes, effects, corner radii | planned | |
-| E13 | Undo/redo with coalescing | planned | |
-| E14 | Rulers, guides, grid, snap lines | planned | |
-| E15 | Save/reopen native `.icraft` + JSON, autosave journal, crash recovery | planned | |
-| E16 | PNG/SVG export with scale/transparent/selection options | planned | |
-| E17 | Command palette + customizable shortcuts + context menus + tooltips | planned | |
-| E18 | Selection toolbar (align, distribute, boolean, opacity, group) | planned | |
-| E19 | Responsive to large documents (tile cache, culling, benchmarked) | planned | |
+| E1 | Infinite canvas: zoom/pan (wheel, trackpad, space+drag, middle mouse) | implemented | engine viewport + input + IPC; `wheel_pans_and_ctrl_wheel_zooms` test; UI wiring in milestone 2 |
+| E2 | Zoom to selection / fit / 100% / selection info | implemented | engine commands `zoom_fit`/`zoom_selection`/`zoom_100`; UI buttons |
+| E3 | Frames, groups, rectangles, ellipses, lines, polygons, stars | implemented | create-drag in `input.rs`; scene builder + layout; editor tests |
+| E4 | Text creation + on-canvas editing | in-progress | engine text nodes + edit sessions + undo verified; DOM textarea overlay in frontend milestone 2 |
+| E5 | Vector paths + pen tool | limited | vector geometry model/render/SVG import done; interactive pen tool not implemented |
+| E6 | Selection: click, shift-click, marquee, deep select, lock/hide respect | implemented | editor tests `click_selects_node_under_cursor`, `marquee_selects_intersecting_nodes` |
+| E7 | Move, resize with handles, rotate, nudge, snap to objects/grid/guides | implemented | move/nudge/snap tested; handle drag math in `input.rs`; guides UI pending |
+| E8 | Copy/paste/duplicate/cut/clipboard | implemented | `duplicate_nodes` + clipboard commands; editor tests |
+| E9 | Group/ungroup, reorder, z-order commands, lock/hide | implemented | ops layer + command table; editor tests |
+| E10 | Layers panel with tree, rename, drag reorder, search | in-progress | engine summary + rename/visibility/lock commands; UI panel milestone 2 |
+| E11 | Pages management | implemented | `add_page`/`rename_page`/`delete_page`/`set_active_page` + editor test |
+| E12 | Property inspector: transform, size, rotation, opacity, blend, fills, strokes, effects, corner radii | in-progress | engine `apply_patch`/opacity/text props implemented; UI inspector milestone 2 |
+| E13 | Undo/redo with coalescing | verified | `History` coalescing + editor tests (drag undo, delete undo, text commit undo) |
+| E14 | Rulers, guides, grid, snap lines | limited | snapping + snap-line overlay in engine; rulers/guides UI pending |
+| E15 | Save/reopen native `.icraft` + JSON, autosave journal, crash recovery | implemented | `save_and_reopen_roundtrip` test; recovery journal in dp-persist; recovery prompt UI pending |
+| E16 | PNG/SVG export with scale/transparent/selection options | implemented | `png_and_svg_export_produce_files` test; PDF also; transparent flag documented as not yet honoured |
+| E17 | Command palette + customizable shortcuts + context menus + tooltips | in-progress | shell exists (apps/ui); build fix + real wiring in milestone 2 |
+| E18 | Selection toolbar (align, distribute, boolean, opacity, group) | in-progress | engine commands implemented + tested; UI toolbar milestone 2 |
+| E19 | Responsive to large documents (tile cache, culling, benchmarked) | limited | viewport culling + layout/text caches implemented; tile cache and benchmarks not yet |
 
 ## Vector editing (Phase 4)
 
