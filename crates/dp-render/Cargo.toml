@@ -1,0 +1,31 @@
+[package]
+name = "dp-render"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Rendering engine: display list, scene builder, viewport culling, batching, CPU rasterizer for deterministic export, wgpu GPU backend"
+
+[features]
+default = ["gpu"]
+gpu = ["dep:wgpu", "dep:pollster"]
+
+[dependencies]
+dp-model = { path = "../dp-model" }
+dp-geom = { path = "../dp-geom" }
+dp-text = { path = "../dp-text" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+glam = { workspace = true }
+kurbo = { workspace = true }
+smallvec = { workspace = true }
+tiny-skia = "0.12.0"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
+lyon = "1.0.19"
+bytemuck = { version = "1.25.2", features = ["derive"] }
+wgpu = { version = "30.0.1", optional = true }
+pollster = { version = "1.0.1", optional = true }
+
+[dev-dependencies]

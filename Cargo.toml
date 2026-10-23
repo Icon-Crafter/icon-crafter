@@ -1,0 +1,60 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/*",
+    "apps/desktop",
+    "apps/backend",
+]
+# Keep the default build lean: the desktop app and the server pull heavy
+# dependency trees (wgpu / tauri / sqlx). Build them explicitly with -p.
+default-members = [
+    "crates/dp-model",
+    "crates/dp-geom",
+    "crates/dp-layout",
+    "crates/dp-text",
+    "crates/dp-render",
+    "crates/dp-io",
+    "crates/dp-persist",
+    "crates/dp-collab",
+    "crates/dp-prototype",
+    "crates/dp-devmode",
+    "crates/dp-plugins",
+    "crates/dp-ai",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT OR Apache-2.0"
+authors = ["Icon Crafter"]
+repository = "https://example.invalid/iconcrafter"
+
+# Dependencies shared by two or more crates only. Crate-specific dependencies
+# are declared in the owning crate so teams can move independently.
+[workspace.dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+uuid = { version = "1.29.0", features = ["v4", "serde"] }
+thiserror = "2.0.21"
+anyhow = "1.0.104"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+glam = { version = "0.34.1", features = ["serde"] }
+kurbo = { version = "0.13.1", features = ["serde"] }
+smallvec = { version = "1.16.4", features = ["serde"] }
+indexmap = { version = "2.14.2", features = ["serde"] }
+bitflags = { version = "2.13.2", features = ["serde"] }
+
+# Dev/CI profiles: a design tool needs responsive debug builds for document
+# operations, so optimise dependencies while keeping our own code debuggable.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+lto = "thin"
+codegen-units = 16
+panic = "abort"

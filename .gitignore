@@ -1,0 +1,27 @@
+# Rust
+/target
+**/*.rs.bk
+*.pdb
+
+# JS / Vite / Tauri
+node_modules/
+apps/ui/dist/
+apps/ui/.vite/
+apps/desktop/gen/
+apps/desktop/target/
+
+# Local runtime data
+.data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+.env
+.env.*
+!.env.example
+
+# Test / build artefacts
+/artifacts/
+*.log
+.DS_Store
+Thumbs.db

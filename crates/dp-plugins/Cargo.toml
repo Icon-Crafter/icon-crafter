@@ -1,0 +1,17 @@
+[package]
+name = "dp-plugins"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Plugin host: manifests, declared permissions, sandboxed document operation API, commands, panels, lifecycle, version compatibility, error isolation"
+
+[dependencies]
+dp-model = { path = "../dp-model" }
+dp-geom = { path = "../dp-geom" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+indexmap = { workspace = true }

@@ -1,0 +1,15 @@
+[package]
+name = "dp-text"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Text engine: font discovery, shaping, fallback, line layout, measurement, glyph runs, text on a path"
+
+[dependencies]
+dp-model = { path = "../dp-model" }
+cosmic-text = "0.19.0"
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+glam = { workspace = true }

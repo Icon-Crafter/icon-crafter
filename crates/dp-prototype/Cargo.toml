@@ -1,0 +1,16 @@
+[package]
+name = "dp-prototype"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Interactive prototyping: interaction graph, triggers, actions, transitions, spring animation, variables, expressions, validated runtime"
+
+[dependencies]
+dp-model = { path = "../dp-model" }
+dp-geom = { path = "../dp-geom" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }

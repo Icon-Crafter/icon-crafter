@@ -1,0 +1,20 @@
+[package]
+name = "dp-geom"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Geometry kernel: transforms, Bezier paths, shape primitives, boolean operations, hit testing, spatial index, snapping"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+glam = { workspace = true }
+kurbo = { workspace = true }
+smallvec = { workspace = true }
+bitflags = { workspace = true }
+i_overlay = "9.1.0"
+
+[dev-dependencies]
+serde_json = { workspace = true }

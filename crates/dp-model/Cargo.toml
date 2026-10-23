@@ -1,0 +1,18 @@
+[package]
+name = "dp-model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Design document model: nodes, properties, styles, components, variables, pages, transactions, schema versioning"
+
+[dependencies]
+dp-geom = { path = "../dp-geom" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+smallvec = { workspace = true }
+indexmap = { workspace = true }
+bitflags = { workspace = true }

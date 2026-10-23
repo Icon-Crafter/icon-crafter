@@ -1,0 +1,14 @@
+[package]
+name = "dp-layout"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Deterministic auto-layout engine: direction, spacing, padding, alignment, hug/fill/fixed sizing, wrapping, constraints, nested layouts"
+
+[dependencies]
+dp-model = { path = "../dp-model" }
+dp-text = { path = "../dp-text" }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
