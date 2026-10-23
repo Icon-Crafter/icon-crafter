@@ -53,6 +53,9 @@ pub fn run() {
             ipc::dev_mark_ready,
             ipc::dev_compare,
             ipc::dev_snapshot,
+            ipc::prototype_play,
+            ipc::prototype_stop,
+            ipc::prototype_back,
         ])
         .setup(|app| {
             tracing::info!(

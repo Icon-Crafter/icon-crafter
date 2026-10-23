@@ -201,4 +201,18 @@ lands (`Effect::drop_shadow`) and confirm the shadow follows the shape with a so
 1x/2x zoom. Confirm the warnings panel lists unsupported effects (inner shadow, layer blur,
 background blur) instead of silently dropping them.
 
+## Session 9 verification — prototype presentation
+
+```powershell
+cargo test -p dp-editor --no-default-features   # 23 passed (new prototype navigation test)
+cargo check -p iconcrafter-desktop              # new prototype_* commands compile
+cargo clippy -p dp-editor --no-default-features --all-targets -- -D warnings
+# Full regression expected: 44 + 72 + 13 + 12 + 20 + 9 + 13 + 23 + 19 + 18 + 14 = 257 passed.
+```
+
+Manual checks once the presentation overlay lands: create two frames, add a click interaction on
+a button (via the prototype panel) pointing at the second frame, press Present → viewport fits the
+first frame with editing chrome hidden, clicking the button navigates to frame 2, Backspace goes
+back, Escape exits. Confirm the wheel still zooms and the status bar reports frame changes.
+
 

@@ -541,6 +541,67 @@ fn variable_collections_and_values_work_through_commands() {
     );
 }
 
+#[test]
+fn prototype_presentation_navigates_and_goes_back() {
+    use dp_geom::Point;
+    use dp_model::PrototypeNode;
+    use dp_model::prototype::Interaction;
+
+    let mut state = new_editor();
+    let page_id = state.document.active_page_id();
+    let page = state.document.page_mut(page_id).expect("page");
+    let frame_a = Node::frame("Screen A", 0.0, 0.0, 200.0, 200.0);
+    let frame_a_id = frame_a.id;
+    page.insert_node(frame_a, None, None).expect("frame A");
+    let frame_b = Node::frame("Screen B", 300.0, 0.0, 200.0, 200.0);
+    let frame_b_id = frame_b.id;
+    page.insert_node(frame_b, None, None).expect("frame B");
+    let mut hotspot = Node::rectangle("Hotspot", 20.0, 20.0, 100.0, 40.0);
+    hotspot.prototype = Some(PrototypeNode {
+        interactions: vec![Interaction::navigate_on_click(frame_b_id)],
+    });
+    page
+        .insert_node(hotspot, Some(frame_a_id), None)
+        .expect("hotspot");
+    state.invalidate_layout();
+
+    state
+        .prototype_play(Some(frame_a_id))
+        .expect("start presenting");
+    assert_eq!(
+        state.playback.as_ref().map(|playback| playback.frame),
+        Some(frame_a_id)
+    );
+    assert!(!state.playback.as_ref().expect("playback").can_back());
+
+    let clicked = state
+        .prototype_click_world(Point::new(60.0, 40.0))
+        .expect("click hotspot");
+    assert!(clicked);
+    assert_eq!(
+        state.playback.as_ref().map(|playback| playback.frame),
+        Some(frame_b_id)
+    );
+    assert!(state
+        .playback
+        .as_ref()
+        .expect("playback")
+        .can_back());
+
+    assert!(state.prototype_back().expect("navigate back"));
+    assert_eq!(
+        state.playback.as_ref().map(|playback| playback.frame),
+        Some(frame_a_id)
+    );
+
+    // Clicking empty canvas does nothing and keeps the current frame.
+    assert!(!state
+        .prototype_click_world(Point::new(190.0, 190.0))
+        .expect("click empty area"));
+    state.prototype_stop();
+    assert!(state.playback.is_none());
+}
+
 trait IntoOk {
     fn into_ok(self);
 }

@@ -238,6 +238,16 @@ pub struct SnapshotError {
     pub severity: String,
 }
 
+/// Prototype presentation state (additive contract field).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SnapshotPrototype {
+    pub active: bool,
+    pub frame_id: NodeId,
+    pub frame_name: String,
+    pub can_back: bool,
+    pub overlay_count: usize,
+}
+
 /// The complete engine state returned by `engine_state` and every mutating
 /// command.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -256,6 +266,7 @@ pub struct Snapshot {
     pub summary: Option<SnapshotSummary>,
     pub selection_details: Vec<SnapshotDetail>,
     pub text_edit: Option<SnapshotTextEdit>,
+    pub prototype: Option<SnapshotPrototype>,
     pub errors: Vec<SnapshotError>,
     pub status: Option<String>,
 }
@@ -282,6 +293,17 @@ impl EditorState {
             })
             .collect();
         let viewport = self.viewport;
+        let prototype = self.playback.as_ref().map(|state| SnapshotPrototype {
+            active: true,
+            frame_id: state.frame,
+            frame_name: self
+                .document
+                .node(state.frame)
+                .map(|node| node.name.clone())
+                .unwrap_or_default(),
+            can_back: state.can_back(),
+            overlay_count: state.overlay_count,
+        });
         Snapshot {
             doc: Some(SnapshotDocMeta {
                 id: self.document.id.to_string(),
@@ -310,6 +332,7 @@ impl EditorState {
             summary: Some(summary),
             selection_details,
             text_edit,
+            prototype,
             errors,
             status: if self.status.is_empty() {
                 None
@@ -343,6 +366,7 @@ impl EditorState {
             summary: None,
             selection_details: Vec::new(),
             text_edit: None,
+            prototype: None,
             errors: Vec::new(),
             status: None,
         }

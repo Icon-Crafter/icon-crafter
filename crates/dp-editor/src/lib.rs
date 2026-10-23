@@ -19,11 +19,12 @@
 pub mod commands;
 pub mod input;
 pub mod overlay;
+pub mod playback;
 pub mod snapshot;
 
 use std::path::{Path, PathBuf};
 
-use dp_geom::{Mat2D, Rect, SnapLine};
+use dp_geom::{Mat2D, Point, Rect, SnapLine};
 use dp_io::ExportOptions;
 use dp_layout::{LayoutEngine, LayoutMap};
 use dp_model::{
@@ -317,6 +318,10 @@ pub struct EditorState {
     pub dev_mode: bool,
     /// Developer handoff state (annotations and readiness).
     pub handoff: dp_devmode::Handoff,
+    /// Active prototype presentation session.
+    pub playback: Option<playback::PrototypePlayback>,
+    /// Pointer-down position while presenting (CSS pixels).
+    pub(crate) proto_pointer_down: Option<Point>,
 }
 
 /// A node plus its parent reference inside the internal clipboard.
@@ -355,6 +360,8 @@ impl EditorState {
             layout_cache: None,
             dev_mode: false,
             handoff: dp_devmode::Handoff::new(0),
+            playback: None,
+            proto_pointer_down: None,
             drag: None,
             marquee: None,
             snap_lines: Vec::new(),
@@ -412,6 +419,113 @@ impl EditorState {
         } else {
             "Design mode".to_owned()
         };
+    }
+
+    /// Starts prototype presentation (or stops it when already presenting is
+    /// not requested). `frame_id` defaults to the document's start frame.
+    pub fn prototype_play(&mut self, frame_id: Option<NodeId>) -> Result<(), EditorError> {
+        let runtime = dp_prototype::PrototypeRuntime::start(&self.document, frame_id).map_err(
+            |error| EditorError::InvalidArguments(format!("cannot start prototype: {error}")),
+        )?;
+        let frame = runtime.current_frame();
+        if !playback::is_frame(&self.document, frame) {
+            return Err(EditorError::InvalidArguments(
+                "prototype start frame must be a frame node".to_owned(),
+            ));
+        }
+        self.selection.clear();
+        self.hover = None;
+        self.text_edit = None;
+        self.drag = None;
+        self.marquee = None;
+        self.snap_lines.clear();
+        self.playback = Some(playback::PrototypePlayback::new(frame, frame));
+        self.fit_frame(frame);
+        let name = self
+            .document
+            .node(frame)
+            .map(|node| node.name.clone())
+            .unwrap_or_default();
+        self.status = format!("Presenting {name} — click hotspots, Backspace to go back, Esc to exit");
+        Ok(())
+    }
+
+    /// Stops prototype presentation.
+    pub fn prototype_stop(&mut self) {
+        if self.playback.take().is_some() {
+            self.proto_pointer_down = None;
+            self.status = "Prototype stopped".to_owned();
+        }
+    }
+
+    /// Fires a click interaction at a world-space point (presentation mode).
+    pub fn prototype_click_world(&mut self, point: Point) -> Result<bool, EditorError> {
+        let Some(playback) = self.playback.clone() else {
+            return Ok(false);
+        };
+        let Some(node_id) = playback::interactive_node_at(&self.document, point) else {
+            return Ok(false);
+        };
+        let mut actions = playback.actions.clone();
+        actions.push(playback::PlaybackAction::Click(node_id));
+        self.prototype_replay(playback.start_frame, actions)
+    }
+
+    /// Navigates back (history or top overlay).
+    pub fn prototype_back(&mut self) -> Result<bool, EditorError> {
+        let Some(playback) = self.playback.clone() else {
+            return Ok(false);
+        };
+        if !playback.can_back() {
+            return Ok(false);
+        }
+        let mut actions = playback.actions.clone();
+        actions.push(playback::PlaybackAction::Back);
+        self.prototype_replay(playback.start_frame, actions)
+    }
+
+    /// Closes the top overlay when one is open.
+    pub fn prototype_close_overlay(&mut self) -> Result<bool, EditorError> {
+        let Some(playback) = self.playback.clone() else {
+            return Ok(false);
+        };
+        if playback.overlay_count == 0 {
+            return Ok(false);
+        }
+        let mut actions = playback.actions.clone();
+        actions.push(playback::PlaybackAction::CloseOverlay);
+        self.prototype_replay(playback.start_frame, actions)
+    }
+
+    fn prototype_replay(
+        &mut self,
+        start_frame: NodeId,
+        actions: Vec<playback::PlaybackAction>,
+    ) -> Result<bool, EditorError> {
+        let runtime = playback::PrototypePlayback::replay(&self.document, start_frame, &actions)
+            .map_err(|error| {
+                EditorError::InvalidArguments(format!("prototype interaction failed: {error}"))
+            })?;
+        let frame = runtime.current_frame();
+        let next = playback::PrototypePlayback::from_runtime(&runtime, start_frame, actions);
+        let previous = self.playback.as_ref().map(|state| state.frame);
+        self.playback = Some(next);
+        if previous != Some(frame) {
+            self.fit_frame(frame);
+            let name = self
+                .document
+                .node(frame)
+                .map(|node| node.name.clone())
+                .unwrap_or_default();
+            self.status = format!("Presenting {name}");
+        }
+        Ok(true)
+    }
+
+    fn fit_frame(&mut self, frame: NodeId) {
+        if let Some(bounds) = self.node_bounds(frame) {
+            self.viewport.fit_rect(bounds, 64.0);
+        }
     }
 
     /// Computes a fresh layout map without holding a borrow of the cache.
@@ -784,8 +898,11 @@ impl EditorState {
             // frames. White page backgrounds are an export-time decision (see
             // `export_options_for`), so the editor stays dark like the design
             // system's --bg-canvas token (`#101318`).
-            list.background =
-                Color::from_hex("#101318").unwrap_or(Color::BLACK);
+            list.background = if self.playback.is_some() {
+                self.document.prototype.background
+            } else {
+                Color::from_hex("#101318").unwrap_or(Color::BLACK)
+            };
             // While a DOM textarea owns the text being edited, the engine must
             // not paint the same text underneath it (double-vision in the UI).
             if let Some(edit) = &self.text_edit
@@ -797,7 +914,17 @@ impl EditorState {
                 .map_err(|error| EditorError::Render(error.to_string()))?
         };
         self.frame_id += 1;
-        let overlay = self.build_overlay();
+        let mut overlay = self.build_overlay();
+        if self.playback.is_some() {
+            // Presentation mode shows the prototype, not the editing chrome.
+            overlay.selection.clear();
+            overlay.handles.clear();
+            overlay.hover = None;
+            overlay.marquee = None;
+            overlay.snap_lines.clear();
+            overlay.text_edit = None;
+            overlay.tool_hint = String::new();
+        }
         Ok(RenderFrame {
             frame_id: self.frame_id,
             width: target.width(),

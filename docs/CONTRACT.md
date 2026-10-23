@@ -405,3 +405,28 @@ clip/opacity preserved; masters must live on the same page (other pages produce 
 a plain box), and instance overrides/variants are **not** applied. Style deletion leaves
 broken references (by design) so validation can report them.
 
+## 11. v1.5 addendum — prototype presentation
+
+| Command | Args | Notes |
+|---|---|---|
+| `prototype_play` | `{ frame_id?: string }` | Starts presenting at `frame_id` or the document start frame; the node must be a frame. Fits the viewport to the frame, clears selection and hides editing chrome. |
+| `prototype_stop` | `{}` | Leaves presentation mode. |
+| `prototype_back` | `{}` | Navigates back (history, or closes the top overlay). Returns an unchanged state when there is nowhere to go. |
+
+Presentation input: while presenting, `pointer` down/up at (nearly) the same CSS position fires
+the click interaction of the topmost interactive node under the cursor (bounds hit test;
+rotated nodes use their world AABB). `key` Escape stops, Backspace / ArrowLeft navigates back.
+Wheel zoom stays available.
+
+Additive snapshot field: `prototype: { active, frame_id, frame_name, can_back, overlay_count } | null`.
+
+Architecture: the playback session is a replayable action log (`Click(node)`, `Back`,
+`CloseOverlay`); every interaction rebuilds `dp_prototype::PrototypeRuntime` from the document,
+replays the actions and ticks 10 s to finish transitions. That keeps presentation a pure
+function of `(document, actions)` — deterministic and independent of undo history.
+
+Limitations: presentation renders the editor canvas fitted to the frame, so neighbouring
+artboards are not clipped away yet; delayed/after-delay triggers need the preview animation
+loop (`tick`) and do not advance on click-driven mutation; expression/conditional actions run
+in the runtime but have no authoring UI; keyboard triggers are not routed while presenting.
+

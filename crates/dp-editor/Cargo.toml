@@ -14,6 +14,7 @@ dp-render = { path = "../dp-render", default-features = false }
 dp-text = { path = "../dp-text" }
 dp-io = { path = "../dp-io" }
 dp-persist = { path = "../dp-persist" }
+dp-prototype = { path = "../dp-prototype" }
 dp-devmode = { path = "../dp-devmode" }
 serde = { workspace = true }
 serde_json = { workspace = true }

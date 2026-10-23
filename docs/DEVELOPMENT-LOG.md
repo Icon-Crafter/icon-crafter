@@ -311,6 +311,27 @@ deleted `target/debug/incremental` (3.42 GB) while investigating.
   session 8 commands (expected 256 engine tests).
 - Next: design-system panels UI (frontend milestone 4 in flight), then collaboration transport.
 
+## Session 9 (2026-10-24) — Prototype presentation in the editor
+
+- `dp-editor` gained prototype presentation: `playback.rs` stores the session as a replayable
+  action log (`Click(node)`, `Back`, `CloseOverlay`); `prototype_play` starts a
+  `dp_prototype::PrototypeRuntime`, fits the viewport to the frame, clears selection and hides
+  editing chrome; `prototype_back` / `prototype_stop` navigate; every interaction rebuilds the
+  runtime from the document and replays the log (deterministic, undo-independent), ticking 10 s
+  to finish transitions. Pointer input while presenting clicks the topmost interactive node at
+  the cursor (bounds hit test); Escape stops, Backspace/ArrowLeft go back; wheel zoom remains.
+- `render` switches to the prototype background and strips selection/handles/marquee/snap
+  lines/text-edit/tool-hint from the overlay while presenting (presentation shows the prototype,
+  not the editor chrome). Snapshot gained an additive `prototype` field.
+- Tauri IPC: `prototype_play{frame_id?}`, `prototype_stop`, `prototype_back`; handler registered.
+  `cargo test -p dp-editor` → 23 passed (new `prototype_presentation_navigates_and_goes_back`).
+- Known limitations (in docs/CONTRACT.md §11): neighbouring artboards are not clipped away in
+  presentation yet; after-delay triggers need the preview animation loop; expression actions and
+  keyboard triggers have no presentation UI/routing yet; hotspot hit testing uses world AABBs.
+- Next: frontend milestone 4 (design-system panels) + presentation overlay UI; then collaboration
+  transport wiring (desktop ↔ Axum WS relay).
+
+
 
 
 

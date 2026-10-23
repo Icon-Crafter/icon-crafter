@@ -227,6 +227,10 @@ pub(crate) enum DragState {
 impl EditorState {
     /// Handles a pointer event.
     pub fn pointer(&mut self, input: &PointerInput) -> Result<(), EditorError> {
+        if self.playback.is_some() {
+            self.prototype_pointer(input);
+            return Ok(());
+        }
         match input.kind {
             PointerKind::Down => self.pointer_down(input),
             PointerKind::Move => self.pointer_move(input),
@@ -236,6 +240,36 @@ impl EditorState {
                 self.hover = None;
                 Ok(())
             }
+        }
+    }
+
+    /// Pointer handling while a prototype presentation is active.
+    fn prototype_pointer(&mut self, input: &PointerInput) {
+        match input.kind {
+            PointerKind::Down => {
+                self.proto_pointer_down = Some(Point::new(input.screen_x, input.screen_y));
+            }
+            PointerKind::Up => {
+                let Some(down) = self.proto_pointer_down.take() else {
+                    return;
+                };
+                let dx = input.screen_x - down.x;
+                let dy = input.screen_y - down.y;
+                if dx * dx + dy * dy > 16.0 {
+                    return;
+                }
+                let world = self
+                    .viewport
+                    .css_to_world(Point::new(input.screen_x, input.screen_y));
+                match self.prototype_click_world(world) {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        self.status = "No prototype hotspot here".to_owned();
+                    }
+                    Err(error) => self.errors.push(error.to_string()),
+                }
+            }
+            _ => {}
         }
     }
 
@@ -567,6 +601,18 @@ impl EditorState {
     /// Handles a key event.
     pub fn key(&mut self, input: &KeyInput) -> Result<(), EditorError> {
         if input.kind != KeyKind::Down {
+            return Ok(());
+        }
+        if self.playback.is_some() {
+            match input.key.as_str() {
+                "Escape" => self.prototype_stop(),
+                "Backspace" | "ArrowLeft" => {
+                    if let Err(error) = self.prototype_back() {
+                        self.errors.push(error.to_string());
+                    }
+                }
+                _ => {}
+            }
             return Ok(());
         }
         let modifiers = input.modifiers;

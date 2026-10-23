@@ -111,10 +111,10 @@ Last updated: session 7 (design-system engine authoring: components, instances, 
 | # | Feature | Status | Evidence / notes |
 |---|---|---|---|
 | P1 | Interaction graph (frames/components), triggers click/hover/press/drag | in progress | engine triggers click/hover/press/key/after-delay + runtime firing tested (dp-prototype); drag trigger + authoring UI not built |
-| P2 | Actions: navigate, overlay open/close, scroll to, back | implemented | runtime executes all six actions; tested incl overlay stack and back navigation; preview UI pending |
-| P3 | Transitions: instant/dissolve/slide/smart animate, duration/easing/spring | implemented | transition progress, spring easing and tick-driven completion tested; smart-animate pair matching (UI side) pending |
+| P2 | Actions: navigate, overlay open/close, scroll to, back | implemented | runtime executes all six actions; editor presentation plays them via a replayable action log (`prototype_play`/`prototype_back`/`prototype_stop`, click hotspots); tests incl overlay stack, back navigation and canvas hotspot click; preview chrome UI pending |
+| P3 | Transitions: instant/dissolve/slide/smart animate, duration/easing/spring | implemented | transition progress, spring easing and tick-driven completion tested; editor playback ticks transitions to completion; smart-animate pair matching (UI side) pending |
 | P4 | Variables + conditional logic, expressions, multiple actions | implemented | runtime variables, alias resolution, arithmetic/logic expression parser (8 expr tests) and multi-action chains tested |
-| P5 | Device/viewport presets, responsive preview, presentation mode, keyboard | in progress | device presets + keyboard triggers in engine; presentation mode UI pending |
+| P5 | Device/viewport presets, responsive preview, presentation mode, keyboard | in progress | device presets + keyboard triggers in engine; editor presentation mode implemented (fits frame, hotspot clicks, Escape stop, Backspace back, editing chrome hidden); responsive preview + presentation UI shell pending |
 | P6 | Shareable preview link (backend) | planned | requires backend share links wired to prototype viewer |
 
 ## Dev Mode (Phase 5)

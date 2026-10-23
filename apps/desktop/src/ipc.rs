@@ -686,6 +686,47 @@ pub fn dev_snapshot(state: State<'_, IpcState>) -> Result<String, IpcError> {
     with_editor(&state, |editor| editor.document_json().map_err(IpcError::from))
 }
 
+// ---------------------------------------------------------------------------
+// Prototype presentation
+// ---------------------------------------------------------------------------
+
+/// Starts prototype presentation, optionally at an explicit frame.
+#[tauri::command]
+pub fn prototype_play(
+    state: State<'_, IpcState>,
+    frame_id: Option<String>,
+) -> Result<Value, IpcError> {
+    let frame = match frame_id {
+        Some(id) => Some(
+            parse_optional_id::<dp_model::NodeId>(Some(id), "frame id")?
+                .ok_or_else(|| IpcError::validation("frame id is required"))?,
+        ),
+        None => None,
+    };
+    with_editor(&state, |editor| {
+        editor.prototype_play(frame)?;
+        snapshot_json(editor)
+    })
+}
+
+/// Stops prototype presentation and returns to design mode.
+#[tauri::command]
+pub fn prototype_stop(state: State<'_, IpcState>) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        editor.prototype_stop();
+        snapshot_json(editor)
+    })
+}
+
+/// Navigates back in the presented prototype.
+#[tauri::command]
+pub fn prototype_back(state: State<'_, IpcState>) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        editor.prototype_back()?;
+        snapshot_json(editor)
+    })
+}
+
 fn parse_code_target(target: &str) -> Result<dp_devmode::CodeTarget, IpcError> {
     match target {
         "css" => Ok(dp_devmode::CodeTarget::Css),
