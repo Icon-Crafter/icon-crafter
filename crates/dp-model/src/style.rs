@@ -14,7 +14,7 @@ use dp_geom::CornerRadii;
 /// Fills and strokes are stored bottom-first. `corner_radii` applies to
 /// rectangles (and to frames/groups that clip content) while `fill_rule` is
 /// used for vectors and boolean results.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct NodeStyle {
     /// Fill layers.
     #[serde(default)]
@@ -37,20 +37,6 @@ pub struct NodeStyle {
     /// Draw strokes inset into the shape bounds (Figma's "inside" preview).
     #[serde(default)]
     pub inset_stroke: bool,
-}
-
-impl Default for NodeStyle {
-    fn default() -> NodeStyle {
-        NodeStyle {
-            fills: Vec::new(),
-            strokes: Vec::new(),
-            effects: Vec::new(),
-            corner_radii: CornerRadii::default(),
-            fill_rule: FillRule::default(),
-            stroke_align: StrokeAlign::default(),
-            inset_stroke: false,
-        }
-    }
 }
 
 impl NodeStyle {

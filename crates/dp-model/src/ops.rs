@@ -767,19 +767,19 @@ pub fn distribute_nodes(
             .inverse()
             .ok_or_else(|| ModelError::InvalidDocument("singular parent matrix".to_string()))?;
         let delta = inverse.apply_vector(delta_world);
-        if let Some(page) = document.page(*page_id) {
-            if let Some(node) = page.get(*id) {
-                let before = node.clone();
-                let mut after = before.clone();
-                after.transform.x += delta.x;
-                after.transform.y += delta.y;
-                after.rev = after.rev.saturating_add(1);
-                transaction.push(Edit::SetNode {
-                    page: *page_id,
-                    before,
-                    after,
-                });
-            }
+        if let Some(page) = document.page(*page_id)
+            && let Some(node) = page.get(*id)
+        {
+            let before = node.clone();
+            let mut after = before.clone();
+            after.transform.x += delta.x;
+            after.transform.y += delta.y;
+            after.rev = after.rev.saturating_add(1);
+            transaction.push(Edit::SetNode {
+                page: *page_id,
+                before,
+                after,
+            });
         }
         cursor += match axis {
             DistributeAxis::Horizontal => world.w,

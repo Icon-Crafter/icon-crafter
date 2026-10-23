@@ -162,7 +162,7 @@ impl TextLayout {
         for (index, glyph) in line.glyphs.iter().enumerate() {
             let center = glyph.x + glyph.advance * 0.5;
             let distance = (center - x).abs();
-            if best.map_or(true, |(_, best_distance)| distance < best_distance) {
+            if best.is_none_or(|(_, best_distance)| distance < best_distance) {
                 best = Some((index, distance));
             }
         }

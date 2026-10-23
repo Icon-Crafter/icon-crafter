@@ -198,10 +198,10 @@ pub fn save_project(
 ) -> Result<SaveReport, PersistError> {
     let path = path.as_ref();
     let magic = check_document(document)?;
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)?;
-        }
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)?;
     }
     let temp = temp_path(path);
     let result = (|| -> Result<SaveReport, PersistError> {

@@ -57,8 +57,8 @@ impl EditorState {
 
     fn execute_command(&mut self, name: &str, args: &Value) -> Result<bool, EditorError> {
         match name {
-            "undo" => self.undo().map(|changed| changed),
-            "redo" => self.redo().map(|changed| changed),
+            "undo" => self.undo(),
+            "redo" => self.redo(),
             "delete" => delete_selection(self),
             "duplicate" => duplicate_selection(self),
             "copy" => {
@@ -155,7 +155,7 @@ impl EditorState {
                         EditorError::InvalidArguments("rename_node requires id".to_owned())
                     })?;
                 let name = text_arg(args, "name")?;
-                rename_node(self, id, &name)
+                rename_node(self, id, name)
             }
             "toggle_visible" => {
                 let ids = resolve_ids(self, args)?;
@@ -655,17 +655,12 @@ pub fn ungroup_selection(state: &mut EditorState) -> Result<bool, EditorError> {
 
 /// Renames one node.
 pub fn rename_node(state: &mut EditorState, id: NodeId, name: &str) -> Result<bool, EditorError> {
-    let page = state.document.active_page_id();
-    let Some(before) = state.document.node(id).cloned() else {
-        return Err(EditorError::InvalidArguments("unknown node id".to_owned()));
+    let patch = NodePatch {
+        name: Some(name.to_owned()),
+        ..NodePatch::default()
     };
-    let mut after = before.clone();
-    after.name = name.to_owned();
-    let mut patch = NodePatch::default();
-    patch.name = Some(name.to_owned());
     let transaction = dp_model::ops::patch_nodes(&state.document, &[id], patch, "Rename", None)?;
     state.apply(transaction)?;
-    let _ = page;
     Ok(true)
 }
 
@@ -675,8 +670,10 @@ pub fn set_opacity(
     ids: &[NodeId],
     opacity: f64,
 ) -> Result<bool, EditorError> {
-    let mut patch = NodePatch::default();
-    patch.opacity = Some(opacity);
+    let patch = NodePatch {
+        opacity: Some(opacity),
+        ..NodePatch::default()
+    };
     let transaction = dp_model::ops::patch_nodes(&state.document, ids, patch, "Set opacity", None)?;
     state.apply(transaction)?;
     Ok(true)

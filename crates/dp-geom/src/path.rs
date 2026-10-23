@@ -286,10 +286,10 @@ impl Contour {
         let mut out: Vec<Point> = Vec::new();
         for segment in self.segments() {
             let pts = segment.flatten(tol);
-            if out.is_empty() {
-                if let Some(first) = pts.first() {
-                    out.push(*first);
-                }
+            if out.is_empty()
+                && let Some(first) = pts.first()
+            {
+                out.push(*first);
             }
             for p in pts.into_iter().skip(1) {
                 if out

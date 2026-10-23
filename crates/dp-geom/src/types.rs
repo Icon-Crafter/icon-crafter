@@ -783,6 +783,12 @@ impl Mat2D {
     }
 
     /// Returns `self * rhs` (equivalent to applying `rhs` first, then `self`).
+    ///
+    /// This intentionally uses an inherent method rather than `std::ops::Mul`:
+    /// affine matrices are ambiguous at the call site (order matters), so we
+    /// want the explicit `base.mul(offset)` spelling everywhere and `then()`
+    /// when reading left-to-right.
+    #[allow(clippy::should_implement_trait)]
     pub fn mul(self, rhs: Mat2D) -> Mat2D {
         Mat2D {
             m11: self.m11 * rhs.m11 + self.m21 * rhs.m12,

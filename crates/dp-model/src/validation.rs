@@ -142,15 +142,15 @@ pub fn validate(document: &Document) -> Vec<ValidationIssue> {
         total_nodes = total_nodes.saturating_add(page.nodes.len());
         for node in page.nodes.values() {
             let path = format!("{base}/node/{}", node.id);
-            if let Some(depth) = page.depth(node.id) {
-                if depth > MAX_DEPTH {
-                    warning(
-                        &mut issues,
-                        "deep-nesting",
-                        path.clone(),
-                        format!("node depth {depth} exceeds {MAX_DEPTH}"),
-                    );
-                }
+            if let Some(depth) = page.depth(node.id)
+                && depth > MAX_DEPTH
+            {
+                warning(
+                    &mut issues,
+                    "deep-nesting",
+                    path.clone(),
+                    format!("node depth {depth} exceeds {MAX_DEPTH}"),
+                );
             }
             validate_node(document, &path, node, &mut issues);
         }
@@ -252,25 +252,25 @@ fn validate_node(document: &Document, path: &str, node: &Node, issues: &mut Vec<
 fn validate_style(document: &Document, path: &str, node: &Node, issues: &mut Vec<ValidationIssue>) {
     for (index, fill) in node.style.fills.iter().enumerate() {
         let fill_path = format!("{path}/style/fills[{index}]");
-        if let Some(style_id) = fill.style_id {
-            if !document.styles.paints.contains_key(&style_id) {
-                warning(
-                    issues,
-                    "broken-style-reference",
-                    fill_path.clone(),
-                    format!("fill references missing paint style {style_id}"),
-                );
-            }
+        if let Some(style_id) = fill.style_id
+            && !document.styles.paints.contains_key(&style_id)
+        {
+            warning(
+                issues,
+                "broken-style-reference",
+                fill_path.clone(),
+                format!("fill references missing paint style {style_id}"),
+            );
         }
-        if let Some(variable_id) = fill.variable_id {
-            if document.variables.variable(variable_id).is_none() {
-                warning(
-                    issues,
-                    "broken-variable-reference",
-                    fill_path.clone(),
-                    format!("fill references missing variable {variable_id}"),
-                );
-            }
+        if let Some(variable_id) = fill.variable_id
+            && document.variables.variable(variable_id).is_none()
+        {
+            warning(
+                issues,
+                "broken-variable-reference",
+                fill_path.clone(),
+                format!("fill references missing variable {variable_id}"),
+            );
         }
         for asset_id in fill.paint.asset_ids() {
             if !document.assets.images.contains_key(&asset_id) {
@@ -293,15 +293,15 @@ fn validate_style(document: &Document, path: &str, node: &Node, issues: &mut Vec
                 format!("stroke weight {} is not a positive number", stroke.weight),
             );
         }
-        if let Some(style_id) = stroke.style_id {
-            if !document.styles.paints.contains_key(&style_id) {
-                warning(
-                    issues,
-                    "broken-style-reference",
-                    stroke_path.clone(),
-                    format!("stroke references missing paint style {style_id}"),
-                );
-            }
+        if let Some(style_id) = stroke.style_id
+            && !document.styles.paints.contains_key(&style_id)
+        {
+            warning(
+                issues,
+                "broken-style-reference",
+                stroke_path.clone(),
+                format!("stroke references missing paint style {style_id}"),
+            );
         }
         for asset_id in stroke.paint.asset_ids() {
             if !document.assets.images.contains_key(&asset_id) {
@@ -313,28 +313,28 @@ fn validate_style(document: &Document, path: &str, node: &Node, issues: &mut Vec
                 );
             }
         }
-        if let Some(dash) = &stroke.dash {
-            if dash.iter().any(|entry| *entry < 0.0 || !entry.is_finite()) {
-                warning(
-                    issues,
-                    "invalid-dash",
-                    stroke_path.clone(),
-                    "dash pattern contains negative or non-finite entries".to_string(),
-                );
-            }
+        if let Some(dash) = &stroke.dash
+            && dash.iter().any(|entry| *entry < 0.0 || !entry.is_finite())
+        {
+            warning(
+                issues,
+                "invalid-dash",
+                stroke_path.clone(),
+                "dash pattern contains negative or non-finite entries".to_string(),
+            );
         }
     }
     for (index, effect) in node.style.effects.iter().enumerate() {
         let effect_path = format!("{path}/style/effects[{index}]");
-        if let Some(radius) = effect.blur_radius() {
-            if !radius.is_finite() {
-                error(
-                    issues,
-                    "non-finite-effect",
-                    effect_path.clone(),
-                    "blur radius is not a number".to_string(),
-                );
-            }
+        if let Some(radius) = effect.blur_radius()
+            && !radius.is_finite()
+        {
+            error(
+                issues,
+                "non-finite-effect",
+                effect_path.clone(),
+                "blur radius is not a number".to_string(),
+            );
         }
         match effect {
             Effect::DropShadow {
@@ -565,15 +565,15 @@ fn validate_text(document: &Document, path: &str, node: &Node, issues: &mut Vec<
             }
         }
     }
-    if let Some(max_lines) = text.paragraph.max_lines {
-        if max_lines == 0 {
-            warning(
-                issues,
-                "zero-max-lines",
-                format!("{path}/text/paragraph"),
-                "max_lines is zero, so no text will be shown".to_string(),
-            );
-        }
+    if let Some(max_lines) = text.paragraph.max_lines
+        && max_lines == 0
+    {
+        warning(
+            issues,
+            "zero-max-lines",
+            format!("{path}/text/paragraph"),
+            "max_lines is zero, so no text will be shown".to_string(),
+        );
     }
     if let Some(on_path) = &text.on_path {
         match document.node(on_path.path_node_id) {
@@ -673,15 +673,15 @@ fn validate_component_role(
                     format!("instance references missing component {component_id}"),
                 );
             }
-            if let Some(swapped) = swapped_component_id {
-                if !document.components.contains_component(*swapped) {
-                    warning(
-                        issues,
-                        "broken-swapped-instance",
-                        path.to_string(),
-                        format!("instance swaps to missing component {swapped}"),
-                    );
-                }
+            if let Some(swapped) = swapped_component_id
+                && !document.components.contains_component(*swapped)
+            {
+                warning(
+                    issues,
+                    "broken-swapped-instance",
+                    path.to_string(),
+                    format!("instance swaps to missing component {swapped}"),
+                );
             }
         }
         Some(ComponentRole::Component { .. }) => {
@@ -723,15 +723,15 @@ fn validate_component_role(
             }
         }
     }
-    if node.kind == NodeKind::Component {
-        if !matches!(node.component, Some(ComponentRole::Component { .. })) {
-            warning(
-                issues,
-                "component-role-missing",
-                path.to_string(),
-                "component node has no component role".to_string(),
-            );
-        }
+    if node.kind == NodeKind::Component
+        && !matches!(node.component, Some(ComponentRole::Component { .. }))
+    {
+        warning(
+            issues,
+            "component-role-missing",
+            path.to_string(),
+            "component node has no component role".to_string(),
+        );
     }
 }
 
@@ -1008,25 +1008,25 @@ fn validate_variables(document: &Document, issues: &mut Vec<ValidationIssue>) {
             );
         }
         for (mode_id, value) in &variable.values {
-            if let Some(collection) = document.variables.collection(variable.collection_id) {
-                if !collection.modes.contains(mode_id) {
-                    warning(
-                        issues,
-                        "variable-mode-missing",
-                        path.clone(),
-                        format!("value for unknown mode {mode_id}"),
-                    );
-                }
+            if let Some(collection) = document.variables.collection(variable.collection_id)
+                && !collection.modes.contains(mode_id)
+            {
+                warning(
+                    issues,
+                    "variable-mode-missing",
+                    path.clone(),
+                    format!("value for unknown mode {mode_id}"),
+                );
             }
-            if let VariableValue::Alias { variable_id } = value {
-                if document.variables.variable(*variable_id).is_none() {
-                    warning(
-                        issues,
-                        "variable-alias-missing",
-                        path.clone(),
-                        format!("alias references missing variable {variable_id}"),
-                    );
-                }
+            if let VariableValue::Alias { variable_id } = value
+                && document.variables.variable(*variable_id).is_none()
+            {
+                warning(
+                    issues,
+                    "variable-alias-missing",
+                    path.clone(),
+                    format!("alias references missing variable {variable_id}"),
+                );
             }
         }
     }

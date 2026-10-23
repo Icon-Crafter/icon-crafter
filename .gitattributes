@@ -1,0 +1,19 @@
+# Keep text files LF in the repository regardless of the platform checkout.
+* text=auto eol=lf
+
+# Binary assets must never be normalised.
+*.png binary
+*.ico binary
+*.icns binary
+*.jpg binary
+*.jpeg binary
+*.icraft binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.zip binary
+
+# Lockfiles churn on every dependency resolution; keep them as text.
+Cargo.lock text eol=lf
+pnpm-lock.yaml text eol=lf

@@ -147,7 +147,7 @@ impl NodePatch {
             node.layout = value.clone();
         }
         if let Some(value) = &self.constraints {
-            node.constraints = value.clone();
+            node.constraints = *value;
         }
         if let Some(value) = &self.component {
             node.component = value.clone();
@@ -197,7 +197,7 @@ impl NodePatch {
             patch.layout = Some(after.layout.clone());
         }
         if before.constraints != after.constraints {
-            patch.constraints = Some(after.constraints.clone());
+            patch.constraints = Some(after.constraints);
         }
         if before.component != after.component {
             patch.component = Some(after.component.clone());
@@ -216,6 +216,13 @@ impl NodePatch {
 }
 
 /// A single reversible structural or property edit within one page.
+///
+/// Variants embed whole [`Node`] snapshots so undo/redo and the collaboration
+/// journal are self-contained and cheap to apply; boxing would add an
+/// allocation per edit and complicate the serialized format, so the enum is
+/// intentionally large (see the `Edit` size note in section 5 of the document
+/// format).
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Edit {
@@ -506,13 +513,13 @@ impl History {
         if transaction.is_empty() {
             return;
         }
-        if let Some(last) = self.undo_stack.last_mut() {
-            if last.can_coalesce_with(&transaction) {
-                last.edits.extend(transaction.edits);
-                last.selection_after = transaction.selection_after;
-                self.redo_stack.clear();
-                return;
-            }
+        if let Some(last) = self.undo_stack.last_mut()
+            && last.can_coalesce_with(&transaction)
+        {
+            last.edits.extend(transaction.edits);
+            last.selection_after = transaction.selection_after;
+            self.redo_stack.clear();
+            return;
         }
         self.undo_stack.push(transaction);
         while self.undo_stack.len() > self.limit {

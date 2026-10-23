@@ -12,9 +12,7 @@ use std::fmt::Write as _;
 
 use dp_geom::{FillRule, Point, Rect, VectorPath};
 use dp_model::{Color, Document, PageId};
-use dp_render::{
-    DisplayList, SceneItem, ScenePaint, SceneShape, SceneStop, SceneStroke, SceneText,
-};
+use dp_render::{DisplayList, SceneItem, ScenePaint, SceneShape, SceneStroke, SceneText};
 use dp_text::TextEngine;
 
 use crate::{ExportError, ExportOptions};
@@ -134,10 +132,6 @@ impl Defs {
     }
 }
 
-fn scene_stops(stops: &[SceneStop]) -> Vec<(f64, Color)> {
-    stops.iter().map(|s| (s.position, s.color)).collect()
-}
-
 /// Exports a page as an SVG string.
 pub fn export_svg(
     document: &Document,
@@ -222,19 +216,19 @@ pub fn export_svg(
         let _ = writeln!(svg, "  </defs>");
     }
 
-    if let Some(background) = options.background {
-        if background.a > 0.0 {
-            let _ = writeln!(
-                svg,
-                "  <rect x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" fill=\"{fill}\" fill-opacity=\"{alpha}\"/>",
-                x = number(bounds.x, precision),
-                y = number(bounds.y, precision),
-                w = number(bounds.w, precision),
-                h = number(bounds.h, precision),
-                fill = color_hex(background),
-                alpha = number(background.a, 3),
-            );
-        }
+    if let Some(background) = options.background
+        && background.a > 0.0
+    {
+        let _ = writeln!(
+            svg,
+            "  <rect x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\" fill=\"{fill}\" fill-opacity=\"{alpha}\"/>",
+            x = number(bounds.x, precision),
+            y = number(bounds.y, precision),
+            w = number(bounds.w, precision),
+            h = number(bounds.h, precision),
+            fill = color_hex(background),
+            alpha = number(background.a, 3),
+        );
     }
 
     svg.push_str(&body);

@@ -56,7 +56,6 @@ pub fn import_svg(svg: &str, name: &str) -> Result<ImportResult, ExportError> {
         frame: frame_id,
         warnings: Vec::new(),
         paths: 0,
-        gradients: 0,
         skipped: 0,
         warned_image: false,
         warned_text: false,
@@ -94,7 +93,6 @@ struct Importer<'a> {
     frame: dp_model::NodeId,
     warnings: Vec<String>,
     paths: usize,
-    gradients: usize,
     skipped: usize,
     warned_image: bool,
     warned_text: bool,
@@ -151,41 +149,41 @@ impl Importer<'_> {
         let local = shift_path(&vector, origin);
 
         let mut style = NodeStyle::default();
-        if let Some(fill) = path.fill() {
-            if let Some(paint) = convert_paint(fill.paint()) {
-                style.fills.push(Fill {
-                    visible: true,
-                    opacity: fill.opacity().get() as f64,
-                    blend: Default::default(),
-                    paint,
-                    style_id: None,
-                    variable_id: None,
-                });
-            }
+        if let Some(fill) = path.fill()
+            && let Some(paint) = convert_paint(fill.paint())
+        {
+            style.fills.push(Fill {
+                visible: true,
+                opacity: fill.opacity().get() as f64,
+                blend: Default::default(),
+                paint,
+                style_id: None,
+                variable_id: None,
+            });
         }
-        if let Some(stroke) = path.stroke() {
-            if let Some(paint) = convert_paint(stroke.paint()) {
-                let mut converted = Stroke::solid(Color::BLACK);
-                converted.visible = true;
-                converted.opacity = stroke.opacity().get() as f64;
-                converted.paint = paint;
-                converted.weight = stroke.width().get() as f64;
-                converted.align = StrokeAlign::Center;
-                converted.cap = match stroke.linecap() {
-                    usvg::LineCap::Butt => dp_model::LineCap::Butt,
-                    usvg::LineCap::Round => dp_model::LineCap::Round,
-                    usvg::LineCap::Square => dp_model::LineCap::Square,
-                };
-                converted.join = match stroke.linejoin() {
-                    usvg::LineJoin::Miter | usvg::LineJoin::MiterClip => dp_model::LineJoin::Miter,
-                    usvg::LineJoin::Round => dp_model::LineJoin::Round,
-                    usvg::LineJoin::Bevel => dp_model::LineJoin::Bevel,
-                };
-                converted.dash = stroke
-                    .dasharray()
-                    .map(|values| values.iter().map(|value| *value as f64).collect());
-                style.strokes.push(converted);
-            }
+        if let Some(stroke) = path.stroke()
+            && let Some(paint) = convert_paint(stroke.paint())
+        {
+            let mut converted = Stroke::solid(Color::BLACK);
+            converted.visible = true;
+            converted.opacity = stroke.opacity().get() as f64;
+            converted.paint = paint;
+            converted.weight = stroke.width().get() as f64;
+            converted.align = StrokeAlign::Center;
+            converted.cap = match stroke.linecap() {
+                usvg::LineCap::Butt => dp_model::LineCap::Butt,
+                usvg::LineCap::Round => dp_model::LineCap::Round,
+                usvg::LineCap::Square => dp_model::LineCap::Square,
+            };
+            converted.join = match stroke.linejoin() {
+                usvg::LineJoin::Miter | usvg::LineJoin::MiterClip => dp_model::LineJoin::Miter,
+                usvg::LineJoin::Round => dp_model::LineJoin::Round,
+                usvg::LineJoin::Bevel => dp_model::LineJoin::Bevel,
+            };
+            converted.dash = stroke
+                .dasharray()
+                .map(|values| values.iter().map(|value| *value as f64).collect());
+            style.strokes.push(converted);
         }
         if style.fills.is_empty() && style.strokes.is_empty() {
             return;
@@ -200,10 +198,10 @@ impl Importer<'_> {
         let node = Node::new(NodeKind::Vector, name, transform)
             .with_geometry(NodeGeometry::Vector { path: local })
             .with_style(style);
-        if let Some(page) = self.document.page_mut(self.page) {
-            if page.insert_node(node, Some(self.frame), None).is_ok() {
-                self.paths += 1;
-            }
+        if let Some(page) = self.document.page_mut(self.page)
+            && page.insert_node(node, Some(self.frame), None).is_ok()
+        {
+            self.paths += 1;
         }
     }
 }
@@ -306,13 +304,12 @@ fn convert_path(path: &tiny_skia_path::Path, transform: TinyTransform) -> Option
                     // SVG closes back to the start; drop a duplicated final
                     // anchor so the model keeps one anchor per corner.
                     let first = contour.anchors[0].point;
-                    if let Some(last) = contour.anchors.last() {
-                        if (last.point.x - first.x).abs() < 1e-6
-                            && (last.point.y - first.y).abs() < 1e-6
-                            && contour.anchors.len() > 2
-                        {
-                            contour.anchors.pop();
-                        }
+                    if let Some(last) = contour.anchors.last()
+                        && (last.point.x - first.x).abs() < 1e-6
+                        && (last.point.y - first.y).abs() < 1e-6
+                        && contour.anchors.len() > 2
+                    {
+                        contour.anchors.pop();
                     }
                     contours.push(contour);
                 } else {

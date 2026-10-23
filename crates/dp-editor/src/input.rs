@@ -389,13 +389,13 @@ impl EditorState {
             } => {
                 let rect = drag_rect(start_world, world, tool);
                 if rect.w > 0.0 || rect.h > 0.0 {
-                    if let Some(page_mut) = self.document.page_mut(page) {
-                        if let Some(node) = page_mut.nodes.get_mut(&node_id) {
-                            node.transform.x = rect.x;
-                            node.transform.y = rect.y;
-                            node.transform.w = rect.w;
-                            node.transform.h = rect.h;
-                        }
+                    if let Some(page_mut) = self.document.page_mut(page)
+                        && let Some(node) = page_mut.nodes.get_mut(&node_id)
+                    {
+                        node.transform.x = rect.x;
+                        node.transform.y = rect.y;
+                        node.transform.w = rect.w;
+                        node.transform.h = rect.h;
                     }
                     self.invalidate_layout();
                 }
@@ -435,15 +435,15 @@ impl EditorState {
                     let sx = target.w / original_bounds.w;
                     let sy = target.h / original_bounds.h;
                     for original in &before {
-                        if let Some(page_mut) = self.document.page_mut(page) {
-                            if let Some(node) = page_mut.nodes.get_mut(&original.id) {
-                                let local_x = original.transform.x - original_bounds.x;
-                                let local_y = original.transform.y - original_bounds.y;
-                                node.transform.x = target.x + local_x * sx;
-                                node.transform.y = target.y + local_y * sy;
-                                node.transform.w = (original.transform.w * sx).max(1.0);
-                                node.transform.h = (original.transform.h * sy).max(1.0);
-                            }
+                        if let Some(page_mut) = self.document.page_mut(page)
+                            && let Some(node) = page_mut.nodes.get_mut(&original.id)
+                        {
+                            let local_x = original.transform.x - original_bounds.x;
+                            let local_y = original.transform.y - original_bounds.y;
+                            node.transform.x = target.x + local_x * sx;
+                            node.transform.y = target.y + local_y * sy;
+                            node.transform.w = (original.transform.w * sx).max(1.0);
+                            node.transform.h = (original.transform.h * sy).max(1.0);
                         }
                     }
                     self.invalidate_layout();
@@ -682,10 +682,10 @@ impl EditorState {
             if !node.visible || node.locked {
                 continue;
             }
-            if let Some(node_layout) = layout.get(*id) {
-                if node_layout.world.contains_point(world) {
-                    return Some(*id);
-                }
+            if let Some(node_layout) = layout.get(*id)
+                && node_layout.world.contains_point(world)
+            {
+                return Some(*id);
             }
         }
         None
@@ -733,10 +733,11 @@ impl EditorState {
         let selected: Vec<NodeId> = self.selection.clone();
         let mut before = Vec::new();
         for id in &selected {
-            if let Some(node) = self.document.node(*id) {
-                if !node.locked && node.visible {
-                    before.push(node.clone());
-                }
+            if let Some(node) = self.document.node(*id)
+                && !node.locked
+                && node.visible
+            {
+                before.push(node.clone());
             }
         }
         let mut snap_targets = Vec::new();
@@ -753,10 +754,10 @@ impl EditorState {
                     if selected_ids.contains(&id) {
                         continue;
                     }
-                    if let Some(node) = self.document.node(id) {
-                        if !node.visible {
-                            continue;
-                        }
+                    if let Some(node) = self.document.node(id)
+                        && !node.visible
+                    {
+                        continue;
                     }
                     if let Some(node_layout) = layout.get(id) {
                         snap_targets.push(node_layout.world);
@@ -780,10 +781,10 @@ impl EditorState {
         let page = self.document.active_page_id();
         let mut before = Vec::new();
         for id in self.selection.clone() {
-            if let Some(node) = self.document.node(id) {
-                if !node.locked {
-                    before.push(node.clone());
-                }
+            if let Some(node) = self.document.node(id)
+                && !node.locked
+            {
+                before.push(node.clone());
             }
         }
         self.drag = Some(DragState::Resizing {

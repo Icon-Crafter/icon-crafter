@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::color::Color;
 use crate::ids::{NodeId, PageId};
-use crate::node::{Node, NodeKind};
+use crate::node::Node;
 use dp_geom::{Mat2D, Rect};
 
 /// Errors from page level tree operations.
@@ -385,13 +385,6 @@ impl Page {
                     }
                 }
             }
-            if let Some(kind) = if node.kind == NodeKind::Text {
-                Some(())
-            } else {
-                None
-            } {
-                let _ = kind;
-            }
         }
         // Cycle detection.
         for id in self.nodes.keys() {
@@ -422,7 +415,7 @@ impl Page {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::Transform;
+    use crate::node::{NodeKind, Transform};
 
     fn page_with_nodes() -> (Page, NodeId, NodeId) {
         let mut page = Page::new("Page 1");

@@ -92,6 +92,7 @@ pub enum ScrollAlign {
 /// Animation easing.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Default)]
 pub enum Easing {
     /// Linear interpolation.
     Linear,
@@ -100,6 +101,7 @@ pub enum Easing {
     /// Ends slow.
     EaseOut,
     /// Slow at both ends.
+    #[default]
     EaseInOut,
     /// Physical spring.
     Spring {
@@ -110,12 +112,6 @@ pub enum Easing {
         /// Mass.
         mass: f64,
     },
-}
-
-impl Default for Easing {
-    fn default() -> Easing {
-        Easing::EaseInOut
-    }
 }
 
 impl Easing {
@@ -168,10 +164,12 @@ impl Easing {
 /// The visual transition between two frames.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Default)]
 pub enum TransitionKind {
     /// No animation.
     Instant,
     /// Cross fade.
+    #[default]
     Dissolve,
     /// Slide the new frame in from a direction.
     Slide {
@@ -181,12 +179,6 @@ pub enum TransitionKind {
     },
     /// Animate elements that exist in both frames (smart animate).
     Smart,
-}
-
-impl Default for TransitionKind {
-    fn default() -> TransitionKind {
-        TransitionKind::Dissolve
-    }
 }
 
 /// A transition with timing.
@@ -327,10 +319,10 @@ impl Interaction {
             _ => {}
         }
         for action in &self.actions {
-            if let Action::SetVariable { variable_id, .. } = action {
-                if *variable_id == VariableId::from_u128(0) {
-                    issues.push("set-variable action has an empty variable id".to_string());
-                }
+            if let Action::SetVariable { variable_id, .. } = action
+                && *variable_id == VariableId::from_u128(0)
+            {
+                issues.push("set-variable action has an empty variable id".to_string());
             }
         }
         issues

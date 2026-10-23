@@ -116,16 +116,20 @@ impl RenderTarget {
     pub fn data_straight_rgba8(&self) -> Vec<u8> {
         let src = self.pixmap.data();
         let mut out = Vec::with_capacity(src.len());
-        for px in src.chunks_exact(4) {
+        for px in src.as_chunks::<4>().0 {
             let a = px[3] as u32;
-            if a == 0 {
-                out.extend_from_slice(&[0, 0, 0, 0]);
-            } else {
-                out.push(((px[0] as u32 * 255 + a / 2) / a).min(255) as u8);
-                out.push(((px[1] as u32 * 255 + a / 2) / a).min(255) as u8);
-                out.push(((px[2] as u32 * 255 + a / 2) / a).min(255) as u8);
-                out.push(a as u8);
-            }
+            let un_premultiply = |channel: u8| -> u8 {
+                (channel as u32 * 255 + a / 2)
+                    .checked_div(a)
+                    .unwrap_or(0)
+                    .min(255) as u8
+            };
+            out.extend_from_slice(&[
+                un_premultiply(px[0]),
+                un_premultiply(px[1]),
+                un_premultiply(px[2]),
+                a as u8,
+            ]);
         }
         out
     }
@@ -196,32 +200,36 @@ fn draw_item(
     let transform = viewport_transform.pre_concat(world);
     let blend = to_tiny_blend(item.blend);
 
-    if let SceneShape::Path(path) = &item.shape {
-        if let Some(tiny_path) = to_tiny_path(path) {
-            for fill in &item.fills {
-                if let Some(shader) = to_shader(&fill.paint, fill.opacity) {
-                    let mut paint = TinyPaint::default();
-                    paint.shader = shader;
-                    paint.blend_mode = blend;
-                    paint.anti_alias = true;
-                    target.fill_path(
-                        &tiny_path,
-                        &paint,
-                        to_tiny_fill_rule(fill.rule),
-                        transform,
-                        mask,
-                    );
-                }
+    if let SceneShape::Path(path) = &item.shape
+        && let Some(tiny_path) = to_tiny_path(path)
+    {
+        for fill in &item.fills {
+            if let Some(shader) = to_shader(&fill.paint, fill.opacity) {
+                let paint = TinyPaint {
+                    shader,
+                    blend_mode: blend,
+                    anti_alias: true,
+                    ..TinyPaint::default()
+                };
+                target.fill_path(
+                    &tiny_path,
+                    &paint,
+                    to_tiny_fill_rule(fill.rule),
+                    transform,
+                    mask,
+                );
             }
-            for stroke in &item.strokes {
-                if let Some(shader) = to_shader(&stroke.paint, stroke.opacity) {
-                    let mut paint = TinyPaint::default();
-                    paint.shader = shader;
-                    paint.blend_mode = blend;
-                    paint.anti_alias = true;
-                    let tiny_stroke = to_tiny_stroke(stroke);
-                    target.stroke_path(&tiny_path, &paint, &tiny_stroke, transform, mask);
-                }
+        }
+        for stroke in &item.strokes {
+            if let Some(shader) = to_shader(&stroke.paint, stroke.opacity) {
+                let paint = TinyPaint {
+                    shader,
+                    blend_mode: blend,
+                    anti_alias: true,
+                    ..TinyPaint::default()
+                };
+                let tiny_stroke = to_tiny_stroke(stroke);
+                target.stroke_path(&tiny_path, &paint, &tiny_stroke, transform, mask);
             }
         }
     }
@@ -284,7 +292,7 @@ fn tint_bitmap(width: u32, height: u32, data: &[u8], color: Color, opacity: f64)
     }
     let opacity = opacity.clamp(0.0, 1.0);
     let mut out = Vec::with_capacity(pixels * 4);
-    for px in data[..pixels * 4].chunks_exact(4) {
+    for px in data[..pixels * 4].as_chunks::<4>().0 {
         let coverage = px[3] as f64 / 255.0;
         let alpha = (color.a * opacity * coverage).clamp(0.0, 1.0);
         let premul_r = color.r * alpha;

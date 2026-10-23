@@ -216,10 +216,10 @@ impl<'a> Solver<'a> {
             );
             return Size::zero();
         }
-        if avail_width.is_none() {
-            if let Some(size) = self.sizes.get(&id) {
-                return *size;
-            }
+        if avail_width.is_none()
+            && let Some(size) = self.sizes.get(&id)
+        {
+            return *size;
         }
 
         let size = match node.kind {
@@ -459,12 +459,12 @@ impl<'a> Solver<'a> {
                     let avail = Some(inner_cross);
                     child_size = self.compute_size(*child_id, &child, avail, depth + 1);
                     child_size.w = inner_cross;
-                } else if let Some(child_layout) = child.layout.as_ref() {
-                    if is_layout_container(child.kind) {
-                        let _ = child_layout;
-                        child_size = self.compute_size(*child_id, &child, None, depth + 1);
-                        child_size.w = inner_cross;
-                    }
+                } else if let Some(child_layout) = child.layout.as_ref()
+                    && is_layout_container(child.kind)
+                {
+                    let _ = child_layout;
+                    child_size = self.compute_size(*child_id, &child, None, depth + 1);
+                    child_size.w = inner_cross;
                 }
             } else {
                 child_size.h = inner_cross;
@@ -561,19 +561,19 @@ impl<'a> Solver<'a> {
                 child_sizing.v == SizeSpec::Fill
             };
             let stretch_by_align = layout.counter_align == CounterAlign::Stretch;
-            if stretches || stretch_by_align {
-                if let Some(size) = self.sizes.get_mut(child_id) {
+            if (stretches || stretch_by_align)
+                && let Some(size) = self.sizes.get_mut(child_id)
+            {
+                if vertical {
+                    size.w = inner_w;
+                } else {
+                    size.h = inner_h;
+                }
+                if let Some(position) = self.positions.get_mut(child_id) {
                     if vertical {
-                        size.w = inner_w;
+                        position.x = padding.left;
                     } else {
-                        size.h = inner_h;
-                    }
-                    if let Some(position) = self.positions.get_mut(child_id) {
-                        if vertical {
-                            position.x = padding.left;
-                        } else {
-                            position.y = padding.top;
-                        }
+                        position.y = padding.top;
                     }
                 }
             }

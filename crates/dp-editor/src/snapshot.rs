@@ -371,7 +371,7 @@ impl EditorState {
             fill_rule: node.style.fill_rule,
             text: node.text.clone(),
             layout: node.layout.clone(),
-            constraints: node.constraints.clone(),
+            constraints: node.constraints,
             component: node.component.clone(),
             is_inside_instance: inside_instance,
             absolute_bounds: world,
@@ -479,10 +479,10 @@ impl EditorState {
     }
 
     fn world_bounds(&self, id: NodeId) -> Rect {
-        if let Some(layout) = self.layout_cache.as_ref() {
-            if let Some(layout) = layout.get(id) {
-                return layout.world;
-            }
+        if let Some(layout) = self.layout_cache.as_ref()
+            && let Some(layout) = layout.get(id)
+        {
+            return layout.world;
         }
         self.document
             .active_page()

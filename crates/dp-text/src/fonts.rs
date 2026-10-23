@@ -53,8 +53,8 @@ impl FontCatalog {
                     continue;
                 }
                 let key = name.to_lowercase();
-                if !index.contains_key(&key) {
-                    index.insert(key, name.to_string());
+                if let std::collections::btree_map::Entry::Vacant(e) = index.entry(key) {
+                    e.insert(name.to_string());
                     canonical.insert(name.to_string());
                 }
             }

@@ -58,8 +58,10 @@ fn svg_export_contains_editable_geometry_and_text() {
 #[test]
 fn png_export_produces_requested_scale() {
     let (document, page) = sample_document();
-    let mut options = ExportOptions::default();
-    options.bounds = Some(Rect::new(0.0, 0.0, 200.0, 120.0));
+    let mut options = ExportOptions {
+        bounds: Some(Rect::new(0.0, 0.0, 200.0, 120.0)),
+        ..ExportOptions::default()
+    };
     let file = export_page(&document, page, ExportFormat::Png, &options).unwrap();
     assert_eq!(&file.bytes[..8], b"\x89PNG\r\n\x1a\n");
     let image = image::load_from_memory(&file.bytes).unwrap();
@@ -74,9 +76,11 @@ fn png_export_produces_requested_scale() {
 #[test]
 fn jpeg_export_has_jpeg_magic() {
     let (document, page) = sample_document();
-    let mut options = ExportOptions::default();
-    options.bounds = Some(Rect::new(0.0, 0.0, 200.0, 120.0));
-    options.background = Some(Color::WHITE);
+    let options = ExportOptions {
+        bounds: Some(Rect::new(0.0, 0.0, 200.0, 120.0)),
+        background: Some(Color::WHITE),
+        ..ExportOptions::default()
+    };
     let file = export_page(&document, page, ExportFormat::Jpeg, &options).unwrap();
     assert_eq!(&file.bytes[..2], b"\xff\xd8");
 }
@@ -84,8 +88,10 @@ fn jpeg_export_has_jpeg_magic() {
 #[test]
 fn pdf_export_produces_pdf_document() {
     let (document, page) = sample_document();
-    let mut options = ExportOptions::default();
-    options.bounds = Some(Rect::new(0.0, 0.0, 200.0, 120.0));
+    let options = ExportOptions {
+        bounds: Some(Rect::new(0.0, 0.0, 200.0, 120.0)),
+        ..ExportOptions::default()
+    };
     let file = export_page(&document, page, ExportFormat::Pdf, &options).unwrap();
     assert!(
         file.bytes.starts_with(b"%PDF"),

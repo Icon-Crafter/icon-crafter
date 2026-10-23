@@ -597,7 +597,7 @@ impl EditorState {
             dp_model::apply_transaction(&mut self.document, &mut self.history, transaction)?;
         self.invalidate_layout();
         self.dirty = true;
-        self.status = format!("{label}");
+        self.status = label.to_string();
         Ok(applied)
     }
 
@@ -676,7 +676,7 @@ impl EditorState {
                 .layout_cache
                 .as_ref()
                 .ok_or_else(|| EditorError::Render("layout unavailable".to_owned()))?;
-            let mut builder = SceneBuilder::with_layout(&self.document, layout);
+            let builder = SceneBuilder::with_layout(&self.document, layout);
             let mut list = builder
                 .build(
                     page_id,

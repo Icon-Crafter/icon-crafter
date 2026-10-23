@@ -358,11 +358,11 @@ impl TextEngine {
             .map(|line| line.top + line.height)
             .unwrap_or(0.0);
         let mut overflow = false;
-        if let Some(limit) = height_opt {
-            if height > limit as f64 + 0.5 {
-                overflow = true;
-                height = limit as f64;
-            }
+        if let Some(limit) = height_opt
+            && height > limit as f64 + 0.5
+        {
+            overflow = true;
+            height = limit as f64;
         }
         if max_lines > 0 {
             if probed_lines.is_some_and(|count| count > max_lines) {

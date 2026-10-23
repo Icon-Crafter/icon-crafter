@@ -143,10 +143,10 @@ impl Builder<'_> {
             }
         }
 
-        if !culled {
-            if let Some(item) = self.make_item(node, matrix, local, world_bounds, clip, opacity) {
-                self.list.items.push(item);
-            }
+        if !culled
+            && let Some(item) = self.make_item(node, matrix, local, world_bounds, clip, opacity)
+        {
+            self.list.items.push(item);
         }
 
         let child_clip = if node.kind.clips_content() {
@@ -235,12 +235,11 @@ impl Builder<'_> {
                     inner,
                 )));
             }
-            NodeKind::Vector => match &node.geometry {
-                Some(dp_model::NodeGeometry::Vector { path }) => {
+            NodeKind::Vector => {
+                if let Some(dp_model::NodeGeometry::Vector { path }) = &node.geometry {
                     shape = SceneShape::Path(Arc::new(path.clone()));
                 }
-                _ => {}
-            },
+            }
             NodeKind::Text => {
                 if let Some(content) = &node.text {
                     let layout = self.layout_text(content, node);
@@ -420,10 +419,10 @@ impl Builder<'_> {
                 return Some(ScenePaint::Solid(color));
             }
         }
-        if let Some(style_id) = style_id {
-            if let Some(shared) = self.document.styles.paint(style_id) {
-                return paint_to_scene(&shared.paint, size);
-            }
+        if let Some(style_id) = style_id
+            && let Some(shared) = self.document.styles.paint(style_id)
+        {
+            return paint_to_scene(&shared.paint, size);
         }
         paint_to_scene(paint, size)
     }

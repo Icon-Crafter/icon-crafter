@@ -134,10 +134,10 @@ impl<T: Copy + Eq + Hash> SpatialGrid<T> {
             for iy in y0..=y1 {
                 if let Some(bucket) = self.cells.get(&(ix, iy)) {
                     for item in bucket {
-                        if let Some(bounds) = self.item_bounds.get(item) {
-                            if bounds.overlaps(area) || bounds.contains_point(area.origin()) {
-                                found.insert(*item);
-                            }
+                        if let Some(bounds) = self.item_bounds.get(item)
+                            && (bounds.overlaps(area) || bounds.contains_point(area.origin()))
+                        {
+                            found.insert(*item);
                         }
                     }
                 }

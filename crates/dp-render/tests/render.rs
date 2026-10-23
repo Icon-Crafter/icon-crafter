@@ -3,8 +3,6 @@
 //! These exercise the real pipeline: document model -> layout -> display list
 //! -> tiny-skia raster -> pixels. They are the visual regression baseline.
 
-use std::sync::OnceLock;
-
 use dp_geom::Size;
 use dp_model::{
     Color, Document, Fill, Node, NodeId, NodeStyle, PageId, Paint, Stroke, StyleId, VariableId,

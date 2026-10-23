@@ -269,34 +269,36 @@ pub fn snap_rect(
         }
     }
 
-    if let Some(grid) = options.grid {
-        if options.snap_grid && grid.size_x > 1e-6 && grid.size_y > 1e-6 {
-            for mv in moving_x.iter() {
-                let nearest = snap_to_step(*mv, grid.origin.x, grid.size_x);
-                candidates_x.push(Candidate {
-                    delta: nearest - mv,
-                    line: SnapLine {
-                        axis: Axis::X,
-                        pos: nearest,
-                        from: moving.top(),
-                        to: moving.bottom(),
-                        kind: SnapKind::Grid,
-                    },
-                });
-            }
-            for mv in moving_y.iter() {
-                let nearest = snap_to_step(*mv, grid.origin.y, grid.size_y);
-                candidates_y.push(Candidate {
-                    delta: nearest - mv,
-                    line: SnapLine {
-                        axis: Axis::Y,
-                        pos: nearest,
-                        from: moving.left(),
-                        to: moving.right(),
-                        kind: SnapKind::Grid,
-                    },
-                });
-            }
+    if let Some(grid) = options.grid
+        && options.snap_grid
+        && grid.size_x > 1e-6
+        && grid.size_y > 1e-6
+    {
+        for mv in moving_x.iter() {
+            let nearest = snap_to_step(*mv, grid.origin.x, grid.size_x);
+            candidates_x.push(Candidate {
+                delta: nearest - mv,
+                line: SnapLine {
+                    axis: Axis::X,
+                    pos: nearest,
+                    from: moving.top(),
+                    to: moving.bottom(),
+                    kind: SnapKind::Grid,
+                },
+            });
+        }
+        for mv in moving_y.iter() {
+            let nearest = snap_to_step(*mv, grid.origin.y, grid.size_y);
+            candidates_y.push(Candidate {
+                delta: nearest - mv,
+                line: SnapLine {
+                    axis: Axis::Y,
+                    pos: nearest,
+                    from: moving.left(),
+                    to: moving.right(),
+                    kind: SnapKind::Grid,
+                },
+            });
         }
     }
 
@@ -403,31 +405,33 @@ pub fn snap_point(
         }
     }
 
-    if let Some(grid) = options.grid {
-        if options.snap_grid && grid.size_x > 1e-6 && grid.size_y > 1e-6 {
-            let nearest_x = snap_to_step(point.x, grid.origin.x, grid.size_x);
-            candidates_x.push(Candidate {
-                delta: nearest_x - point.x,
-                line: SnapLine {
-                    axis: Axis::X,
-                    pos: nearest_x,
-                    from: point.y - 24.0,
-                    to: point.y + 24.0,
-                    kind: SnapKind::Grid,
-                },
-            });
-            let nearest_y = snap_to_step(point.y, grid.origin.y, grid.size_y);
-            candidates_y.push(Candidate {
-                delta: nearest_y - point.y,
-                line: SnapLine {
-                    axis: Axis::Y,
-                    pos: nearest_y,
-                    from: point.x - 24.0,
-                    to: point.x + 24.0,
-                    kind: SnapKind::Grid,
-                },
-            });
-        }
+    if let Some(grid) = options.grid
+        && options.snap_grid
+        && grid.size_x > 1e-6
+        && grid.size_y > 1e-6
+    {
+        let nearest_x = snap_to_step(point.x, grid.origin.x, grid.size_x);
+        candidates_x.push(Candidate {
+            delta: nearest_x - point.x,
+            line: SnapLine {
+                axis: Axis::X,
+                pos: nearest_x,
+                from: point.y - 24.0,
+                to: point.y + 24.0,
+                kind: SnapKind::Grid,
+            },
+        });
+        let nearest_y = snap_to_step(point.y, grid.origin.y, grid.size_y);
+        candidates_y.push(Candidate {
+            delta: nearest_y - point.y,
+            line: SnapLine {
+                axis: Axis::Y,
+                pos: nearest_y,
+                from: point.x - 24.0,
+                to: point.x + 24.0,
+                kind: SnapKind::Grid,
+            },
+        });
     }
 
     let mut result = SnapResult::empty();
