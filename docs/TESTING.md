@@ -129,3 +129,28 @@ Expected: window titled `Untitled · Icon Crafter`, status bar badge `TAURI IPC`
 rectangle yields revision 2 with a `#D9D9D9` fill, undo returns to revision 3, the inspector
 shows live X/Y/W/H, and the command palette/shortcuts work without console errors.
 
+## Session 6 verification — Dev Mode engine + IPC
+
+```powershell
+# Dev Mode engine (inspection, deterministic codegen, annotations/diff)
+cargo test -p dp-devmode                          # 14 passed
+cargo clippy -p dp-devmode --all-targets -- -D warnings   # clean
+
+# Regression: editor still green after dev_mode/handoff state was added
+cargo test -p dp-editor --no-default-features     # 19 passed
+
+# Desktop IPC now exposes the Dev Mode commands
+cargo check -p iconcrafter-desktop                # exit 0
+
+# Full engine regression (all default-members)
+cargo test -p dp-geom -p dp-model -p dp-text -p dp-layout -p dp-render `
+  -p dp-io -p dp-persist -p dp-editor -p dp-collab -p dp-prototype `
+  -p dp-devmode --no-default-features
+# Expected: 44 + 65 + 13 + 12 + (6 unit + 11 integration) + 9 + 13 + 19 + 19 + 18 + 14 = 243 passed.
+```
+
+Dev Mode manual check once the panel UI lands: select a frame → inspect tab shows bounds/colours/
+type/effects; codegen tab returns CSS + React (deterministic — same selection twice → identical
+strings); mark ready with an open annotation must surface the open-annotation warning in the UI;
+compare two saves shows added/removed/changed counts.
+

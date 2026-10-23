@@ -45,6 +45,13 @@ pub fn run() {
             ipc::import_svg,
             ipc::import_image,
             ipc::set_preference,
+            ipc::set_dev_mode,
+            ipc::dev_inspect,
+            ipc::dev_codegen,
+            ipc::dev_handoff,
+            ipc::dev_add_annotation,
+            ipc::dev_mark_ready,
+            ipc::dev_compare,
         ])
         .setup(|app| {
             tracing::info!(

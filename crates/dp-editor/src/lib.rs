@@ -313,6 +313,10 @@ pub struct EditorState {
     pub(crate) clipboard: Vec<ClipboardNode>,
     /// Errors accumulated during the last input batch.
     pub(crate) errors: Vec<String>,
+    /// Whether Dev Mode is active.
+    pub dev_mode: bool,
+    /// Developer handoff state (annotations and readiness).
+    pub handoff: dp_devmode::Handoff,
 }
 
 /// A node plus its parent reference inside the internal clipboard.
@@ -349,6 +353,8 @@ impl EditorState {
             layout_engine: LayoutEngine::new(),
             text_engine: TextEngine::new(),
             layout_cache: None,
+            dev_mode: false,
+            handoff: dp_devmode::Handoff::new(0),
             drag: None,
             marquee: None,
             snap_lines: Vec::new(),
@@ -396,6 +402,90 @@ impl EditorState {
             self.layout_cache = Some(map);
         }
         self.layout_cache.as_ref().expect("layout just computed")
+    }
+
+    /// Turns Dev Mode on or off.
+    pub fn set_dev_mode(&mut self, enabled: bool) {
+        self.dev_mode = enabled;
+        self.status = if enabled {
+            "Dev Mode: select a layer to inspect".to_owned()
+        } else {
+            "Design mode".to_owned()
+        };
+    }
+
+    /// Computes a fresh layout map without holding a borrow of the cache.
+    fn dev_layout_map(&mut self) -> LayoutMap {
+        let page = self.document.active_page().clone();
+        self.layout_engine.compute_page(&page)
+    }
+
+    /// Developer inspection data for the current selection.
+    pub fn inspect_selection(&mut self) -> dp_devmode::InspectSnapshot {
+        let ids = self.selection.clone();
+        let layout = self.dev_layout_map();
+        self.handoff.revision = self.document.revision;
+        dp_devmode::inspect(&self.document, &layout, &ids)
+    }
+
+    /// Deterministic code generation for the current selection.
+    pub fn generate_code(
+        &mut self,
+        target: dp_devmode::CodeTarget,
+        precision: u32,
+    ) -> Result<dp_devmode::GeneratedCode, EditorError> {
+        let ids = self.selection.clone();
+        let layout = self.dev_layout_map();
+        let options = dp_devmode::CodegenOptions {
+            target,
+            precision: precision.clamp(0, 4),
+            include_comments: true,
+            embed_wrapper: true,
+        };
+        dp_devmode::generate(&self.document, &layout, &ids, &options)
+            .map_err(|error| EditorError::InvalidArguments(error.to_string()))
+    }
+
+    /// Structural comparison against another revision of the same document.
+    pub fn compare_revision(&self, other: &Document) -> dp_devmode::RevisionDiff {
+        dp_devmode::compare_documents(&self.document, other)
+    }
+
+    /// Adds a developer annotation to a node and returns its id.
+    pub fn dev_add_annotation(
+        &mut self,
+        node: NodeId,
+        body: String,
+        author: String,
+        created_at: String,
+        kind: dp_devmode::AnnotationKind,
+        link: Option<String>,
+    ) -> Result<uuid::Uuid, EditorError> {
+        let Some(target) = self.document.node(node) else {
+            return Err(EditorError::InvalidArguments(format!(
+                "unknown node {node}"
+            )));
+        };
+        let name = target.name.clone();
+        let id = self
+            .handoff
+            .add_annotation(node, name, body, author, created_at, kind);
+        if let Some(link) = link {
+            self.handoff.link_annotation(id, link);
+        }
+        self.handoff.revision = self.document.revision;
+        Ok(id)
+    }
+
+    /// Marks the current handoff readiness.
+    pub fn dev_mark_ready(
+        &mut self,
+        status: dp_devmode::HandoffStatus,
+        by: String,
+        at: String,
+    ) {
+        self.handoff.revision = self.document.revision;
+        self.handoff.mark_ready(status, by, at);
     }
 
     /// World matrix of a node, honouring auto layout.

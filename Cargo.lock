@@ -1780,12 +1780,14 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
 name = "dp-editor"
 version = "0.1.0"
 dependencies = [
+ "dp-devmode",
  "dp-geom",
  "dp-io",
  "dp-layout",

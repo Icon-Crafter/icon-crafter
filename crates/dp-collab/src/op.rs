@@ -127,7 +127,7 @@ impl NodeField {
             NodeField::Geometry => serde_json::to_value(&node.geometry),
             NodeField::Text => serde_json::to_value(&node.text),
             NodeField::Layout => serde_json::to_value(&node.layout),
-            NodeField::Constraints => serde_json::to_value(&node.constraints),
+            NodeField::Constraints => serde_json::to_value(node.constraints),
             NodeField::Component => serde_json::to_value(&node.component),
             NodeField::Prototype => serde_json::to_value(&node.prototype),
             NodeField::Props => serde_json::to_value(&node.props),
@@ -178,6 +178,12 @@ fn decode_optional<T: serde::de::DeserializeOwned>(
 }
 
 /// One replicated operation.
+///
+/// Ops are short-lived values that travel in batches (one envelope per UI
+/// action), so the larger insert/page variants are kept inline: boxing would add
+/// an allocation to every op to shrink a struct that is never stored in large
+/// collections on the client.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Op {

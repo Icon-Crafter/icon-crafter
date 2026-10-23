@@ -20,7 +20,7 @@ use std::sync::Mutex;
 use dp_editor::commands::CommandOutcome;
 use dp_editor::input::{KeyInput, KeyKind, Modifiers, PointerInput, PointerKind, WheelInput};
 use dp_editor::{EditorError, EditorState, ToolId};
-use dp_model::DocKind;
+use dp_model::{DocKind, Document};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use tauri::State;
@@ -582,6 +582,128 @@ pub fn set_preference(
     let mut inner = state.inner.lock().map_err(|_| lock_error())?;
     inner.preferences.insert(key, value);
     Ok(Value::Object(inner.preferences.clone()))
+}
+
+// ---------------------------------------------------------------------------
+// Dev Mode (inspection, code generation, handoff, revision compare)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn set_dev_mode(state: State<'_, IpcState>, enabled: bool) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        editor.set_dev_mode(enabled);
+        snapshot_json(editor)
+    })
+}
+
+#[tauri::command]
+pub fn dev_inspect(state: State<'_, IpcState>) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        let inspection = editor.inspect_selection();
+        serde_json::to_value(inspection).map_err(|error| IpcError::internal(error.to_string()))
+    })
+}
+
+#[tauri::command]
+pub fn dev_codegen(
+    state: State<'_, IpcState>,
+    target: String,
+    precision: Option<u32>,
+) -> Result<Value, IpcError> {
+    let target = parse_code_target(&target)?;
+    with_editor(&state, |editor| {
+        let generated = editor.generate_code(target, precision.unwrap_or(2))?;
+        serde_json::to_value(generated).map_err(|error| IpcError::internal(error.to_string()))
+    })
+}
+
+#[tauri::command]
+pub fn dev_handoff(state: State<'_, IpcState>) -> Result<Value, IpcError> {
+    with_editor(&state, |editor| {
+        serde_json::to_value(&editor.handoff).map_err(|error| IpcError::internal(error.to_string()))
+    })
+}
+
+#[tauri::command]
+pub fn dev_add_annotation(
+    state: State<'_, IpcState>,
+    node_id: String,
+    body: String,
+    author: String,
+    created_at: String,
+    kind: Option<String>,
+    link: Option<String>,
+) -> Result<Value, IpcError> {
+    let node = parse_optional_id::<dp_model::NodeId>(Some(node_id), "node id")?
+        .ok_or_else(|| IpcError::validation("node id is required"))?;
+    let kind = match kind.as_deref() {
+        None | Some("") | Some("note") => dp_devmode::AnnotationKind::Note,
+        Some("implementation") => dp_devmode::AnnotationKind::Implementation,
+        Some("measurement") => dp_devmode::AnnotationKind::Measurement,
+        Some(other) => {
+            return Err(IpcError::validation(format!(
+                "unknown annotation kind '{other}'"
+            )))
+        }
+    };
+    with_editor(&state, |editor| {
+        editor.dev_add_annotation(node, body.clone(), author.clone(), created_at.clone(), kind, link.clone())?;
+        serde_json::to_value(&editor.handoff).map_err(|error| IpcError::internal(error.to_string()))
+    })
+}
+
+#[tauri::command]
+pub fn dev_mark_ready(
+    state: State<'_, IpcState>,
+    status: String,
+    by: String,
+    at: String,
+) -> Result<Value, IpcError> {
+    let status = parse_handoff_status(&status)?;
+    with_editor(&state, |editor| {
+        editor.dev_mark_ready(status, by.clone(), at.clone());
+        serde_json::to_value(&editor.handoff).map_err(|error| IpcError::internal(error.to_string()))
+    })
+}
+
+#[tauri::command]
+pub fn dev_compare(
+    state: State<'_, IpcState>,
+    document_json: String,
+) -> Result<Value, IpcError> {
+    let other = Document::from_json_str(&document_json)
+        .map_err(EditorError::from)
+        .map_err(IpcError::from)?;
+    with_editor(&state, |editor| {
+        let diff = editor.compare_revision(&other);
+        serde_json::to_value(diff).map_err(|error| IpcError::internal(error.to_string()))
+    })
+}
+
+fn parse_code_target(target: &str) -> Result<dp_devmode::CodeTarget, IpcError> {
+    match target {
+        "css" => Ok(dp_devmode::CodeTarget::Css),
+        "react" | "react_typescript" | "tsx" => Ok(dp_devmode::CodeTarget::ReactTypeScript),
+        "swiftui" | "swift" => Ok(dp_devmode::CodeTarget::SwiftUi),
+        "compose" | "kotlin" => Ok(dp_devmode::CodeTarget::Compose),
+        other => Err(IpcError::validation(format!(
+            "unknown code target '{other}'"
+        ))),
+    }
+}
+
+fn parse_handoff_status(status: &str) -> Result<dp_devmode::HandoffStatus, IpcError> {
+    match status {
+        "draft" => Ok(dp_devmode::HandoffStatus::Draft),
+        "ready_for_review" | "review" => Ok(dp_devmode::HandoffStatus::ReadyForReview),
+        "ready_for_development" | "ready" => {
+            Ok(dp_devmode::HandoffStatus::ReadyForDevelopment)
+        }
+        "implemented" => Ok(dp_devmode::HandoffStatus::Implemented),
+        other => Err(IpcError::validation(format!(
+            "unknown handoff status '{other}'"
+        ))),
+    }
 }
 
 fn parse_node_ids(ids: Option<Vec<String>>) -> Result<Vec<dp_model::NodeId>, IpcError> {

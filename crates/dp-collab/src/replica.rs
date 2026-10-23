@@ -97,6 +97,10 @@ impl PageState {
     }
 
     /// Alive children of `parent` in convergent order.
+    ///
+    /// Used by the replica tests today and by the upcoming dev-mode inspection
+    /// and presence layers; kept on the type instead of duplicating the filter.
+    #[allow(dead_code)]
     fn children_of(&self, parent: Option<NodeId>) -> Vec<NodeId> {
         self.order
             .get(&parent)
@@ -387,11 +391,10 @@ impl Replica {
                 field: None,
             })));
         }
-        if let Some(parent_id) = parent {
-            if !state.nodes.contains_key(&parent_id) {
+        if let Some(parent_id) = parent
+            && !state.nodes.contains_key(&parent_id) {
                 return Err(OpError::UnknownNode(parent_id));
             }
-        }
         let mut stored = node.clone();
         stored.parent = parent;
         stored.children.clear();
@@ -853,9 +856,5 @@ mod tests {
             .unwrap();
         let materialized = replica.to_document().unwrap();
         assert_eq!(materialized.pages[0].nodes[&node].transform.w, 70.0);
-    }
-
-    fn uuid(bytes: [u8; 16]) -> Uuid {
-        Uuid::from_bytes(bytes)
     }
 }

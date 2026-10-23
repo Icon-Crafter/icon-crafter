@@ -339,3 +339,40 @@ UI — never silently ignored, never a fake success.
   `export_*.args.node_ids` is accepted but currently equivalent to selection/page.
 * One document per app instance (multi-window is a later milestone).
 
+## 9. v1.3 addendum — Dev Mode commands (session 6)
+
+Dev Mode is a separate inspection surface: the design canvas keeps using `render_frame`;
+the Developer panel calls these commands with a *selection*, and no command mutates the
+design except handoff metadata.
+
+| Command | Args | Returns |
+|---|---|---|
+| `set_dev_mode` | `{ enabled: boolean }` | `EngineState` (design mode unchanged) |
+| `dev_inspect` | `{}` | `InspectSnapshot` for the current selection |
+| `dev_codegen` | `{ target: "css" \| "react" \| "swiftui" \| "compose", precision?: number }` | `GeneratedCode` |
+| `dev_handoff` | `{}` | `Handoff` |
+| `dev_add_annotation` | `{ node_id, body, author, created_at, kind?: "note" \| "implementation" \| "measurement", link? }` | `Handoff` |
+| `dev_mark_ready` | `{ status: "draft" \| "ready_for_review" \| "ready_for_development" \| "implemented", by, at }` | `Handoff` |
+| `dev_compare` | `{ document_json: string }` | `RevisionDiff` |
+
+Shapes (snake_case):
+
+* `InspectSnapshot { nodes: NodeInspect[], bounds?: [x,y,w,h], total_size: [w,h], warnings: string[] }`.
+  `NodeInspect` carries `bounds`, `size`, `local_position`, `rotation`, `matrix`, resolved
+  `fills`/`strokes`/`effects`, `corner_radii`, auto-layout summary, `constraints`, `text`
+  typography + resolved colour, `component` role/name/overrides, `variable_refs`, `style_refs`.
+* `GeneratedCode { target, language, extension, code, warnings, requires_manual_adaptation, node_count }`.
+  `code` is deterministic (no timestamps/random ids). `requires_manual_adaptation` is true
+  whenever warnings exist; SwiftUI/Compose are always true. Generated code is a visual
+  approximation — vectors, booleans, images, gradients beyond the first stop and auto layout
+  are called out explicitly and must not be treated as production-ready.
+* `Handoff { revision, status, annotations: [{ id, node_id, node_name, body, author, created_at, kind, link?, resolved }], marked_ready_by?, marked_ready_at? }`.
+* `RevisionDiff { added: [{id,name,kind}], removed: [...], changed: [{id,name,fields}], counts: {added,removed,changed} }`;
+  comparisons are structural (name, kind, visibility, opacity, blend, transform, style,
+  geometry, text, layout, constraints, component) and never claim runtime equivalence.
+
+Errors: unknown `target`/`status`/`kind`, empty selection (`dev_codegen`), and invalid
+`document_json` are returned to the UI as contract errors (`unsupported`/`validation`), never
+as fake success. Presentation-only notes: measurement copy strings are produced UI-side from
+the snapshot; the handoff record is local to the editor session until collaboration sync lands.
+

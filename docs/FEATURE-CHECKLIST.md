@@ -7,7 +7,7 @@ tested) · **verified** (verified end-to-end in the running app) · **blocked** 
 Rule: a feature is never marked implemented/verified because a button exists. Each row
 names the verification evidence in the development log or a test.
 
-Last updated: session 3 (engine vertical slice complete and green; desktop IPC compiles; backend delivered and unit-tested; frontend milestone 2 in flight).
+Last updated: session 6 (Dev Mode engine landed and verified; live desktop IPC verified end-to-end; collaboration protocol in engine; backend unit-tested; frontend capability pass integrated).
 
 ## Foundation
 
@@ -32,6 +32,7 @@ Last updated: session 3 (engine vertical slice complete and green; desktop IPC c
 | F17 | Desktop IPC layer (Tauri commands = contract) | verified | `cargo check -p iconcrafter-desktop` passes; real window launch: WebView2 loaded the real UI (`TAURI IPC` badge), `engine_state`/`pointer`/`command` round-trips, rectangle create (rev 2) + undo (rev 3) verified live (2026-10-24) |
 | F18 | `dp-prototype`: deterministic runtime (interaction graph, triggers, actions, transitions, timers, variables, expression language, flow validation) | verified | `cargo test -p dp-prototype` → 18 passed (2026-10-24); preview UI and shareable links pending |
 | F19 | `dp-collab`: HLC/Lamport clocks + actor ids, RGA sibling ordering with tombstones, per-field LWW registers, delete/insert resurrection, page + document-name registers, validated op envelopes, presence/conflict payloads, converged document materialization | verified (engine) | `cargo test -p dp-collab` → 19 passed (2026-10-24); desktop↔server transport and live multi-client wiring pending |
+| F20 | `dp-devmode`: inspection snapshots (bounds/matrix/styles/typography/effects/component/variable refs), deterministic CSS + React/TS + SwiftUI + Compose generation with explicit manual-adaptation warnings, annotation/handoff tracking, structural revision diff | verified (engine) | `cargo test -p dp-devmode` → 14 passed (2026-10-24); strict clippy clean; Dev Mode IPC commands `dev_inspect`/`dev_codegen`/`dev_handoff`/`dev_add_annotation`/`dev_mark_ready`/`dev_compare` compile in the desktop crate; panel UI pending |
 
 ## Design editor — Phase 3 vertical slice
 
@@ -119,10 +120,10 @@ Last updated: session 3 (engine vertical slice complete and green; desktop IPC c
 
 | # | Feature | Status | Evidence / notes |
 |---|---|---|---|
-| D1 | Inspect dimensions/spacing/constraints/colors/type/effects/components/variables | planned | |
-| D2 | Deterministic CSS / React+TS / SwiftUI / Compose generation | planned | |
-| D3 | Asset export panel + copy measurements/styles | planned | |
-| D4 | Annotations, ready-for-dev status, links to code/docs, revision compare | planned | |
+| D1 | Inspect dimensions/spacing/constraints/colors/type/effects/components/variables | implemented (engine) | `dp-devmode::inspect` resolves layout, variables, styles, typography, component refs; 14 tests; UI panel pending |
+| D2 | Deterministic CSS / React+TS / SwiftUI / Compose generation | implemented (engine) | `dp-devmode::codegen`, deterministic-output test, warnings + `requires_manual_adaptation`; SwiftUI/Compose always flagged manual |
+| D3 | Asset export panel + copy measurements/styles | in progress | scoped PNG/SVG/PDF export dialogs work end-to-end (engine + UI); copy-measurements affordances in the UI still pending |
+| D4 | Annotations, ready-for-dev status, links to code/docs, revision compare | implemented (engine) | `dp-devmode::workbench` (annotations/resolve/link/readiness/structural diff) tested; UI panel pending |
 
 ## Collaboration & backend (Phase 6)
 

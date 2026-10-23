@@ -109,7 +109,7 @@ impl<T: Clone + PartialEq> RgaList<T> {
         value: T,
         id: Hlc,
     ) -> Result<(), RgaError> {
-        if self.entries.iter().any(|entry| &entry.value == &value) {
+        if self.entries.iter().any(|entry| entry.value == value) {
             return Err(RgaError::Duplicate);
         }
         let anchor = match after {

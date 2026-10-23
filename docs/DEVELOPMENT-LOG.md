@@ -247,4 +247,23 @@ deleted `target/debug/incremental` (3.42 GB) while investigating.
 - Next: wire `dp-collab` into the desktop session and the Axum WebSocket relay (server already
   has an op journal keyed by `(file_id, batch_id)`), then component/style/variable authoring UI.
 
+## Session 6 (2026-10-24) — Dev Mode engine + IPC
+
+- `dp-devmode` implemented from stub: `inspect.rs` (selection inspection resolving layout,
+  style/variable paints, typography, effects, component/variable refs), `codegen.rs`
+  (deterministic CSS / React+TS / SwiftUI / Compose with honest manual-adaptation warnings),
+  `workbench.rs` (annotations, resolve/link, readiness status, structural revision diff).
+  `cargo test -p dp-devmode` → 14 passed; strict clippy clean.
+- Dev Mode wired through the editor and IPC: `EditorState` gained `dev_mode` + `handoff`
+  state, `inspect_selection`, `generate_code`, `compare_revision`, `dev_add_annotation`,
+  `dev_mark_ready`; new Tauri commands `set_dev_mode`, `dev_inspect`, `dev_codegen`,
+  `dev_handoff`, `dev_add_annotation`, `dev_mark_ready`, `dev_compare`; contract documented
+  in `docs/CONTRACT.md` §9. `cargo check -p iconcrafter-desktop` exits 0.
+- Known limitations written down rather than hidden: generated code is a visual
+  approximation; SwiftUI/Compose always require adaptation; auto layout is flattened to
+  offsets; vectors/images/booleans need asset export; handoff data is session-local until
+  collaboration sync lands; Dev Mode panel UI is the next frontend milestone.
+- Next: Dev Mode panel UI (inspect/codegen/handoff tabs), then collaboration transport
+  wiring (desktop ↔ Axum WS relay), component/style/variable authoring UI.
+
 
