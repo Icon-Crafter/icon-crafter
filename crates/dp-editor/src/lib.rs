@@ -684,7 +684,20 @@ impl EditorState {
                     &mut self.text_engine,
                 )
                 .map_err(|error| EditorError::Render(error.to_string()))?;
-            list.background = self.document.active_page().background;
+            // The interactive viewport paints workspace chrome, not the page
+            // background: pages are infinite canvases whose artboards are
+            // frames. White page backgrounds are an export-time decision (see
+            // `export_options_for`), so the editor stays dark like the design
+            // system's --bg-canvas token (`#101318`).
+            list.background =
+                Color::from_hex("#101318").unwrap_or(Color::BLACK);
+            // While a DOM textarea owns the text being edited, the engine must
+            // not paint the same text underneath it (double-vision in the UI).
+            if let Some(edit) = &self.text_edit
+                && let Some(item) = list.items.iter_mut().find(|item| item.node_id == edit.node_id)
+            {
+                item.text = None;
+            }
             RenderTarget::render(&list, &self.viewport, &mut self.text_engine)
                 .map_err(|error| EditorError::Render(error.to_string()))?
         };
@@ -794,7 +807,18 @@ impl EditorState {
         path: impl AsRef<Path>,
         scale: f64,
     ) -> Result<PathBuf, EditorError> {
-        let options = self.export_options(scale);
+        self.export_png_scoped(path, scale, false, &[])
+    }
+
+    /// Exports a PNG honouring an explicit node scope and transparency.
+    pub fn export_png_scoped(
+        &mut self,
+        path: impl AsRef<Path>,
+        scale: f64,
+        transparent: bool,
+        ids: &[NodeId],
+    ) -> Result<PathBuf, EditorError> {
+        let options = self.export_options_for(scale, ids, transparent);
         let page = self.document.active_page_id();
         dp_io::export_page_to_file(
             &self.document,
@@ -809,7 +833,16 @@ impl EditorState {
 
     /// Exports an SVG of the selection (or the whole page).
     pub fn export_svg(&mut self, path: impl AsRef<Path>) -> Result<PathBuf, EditorError> {
-        let options = self.export_options(1.0);
+        self.export_svg_scoped(path, &[])
+    }
+
+    /// Exports an SVG for an explicit node scope.
+    pub fn export_svg_scoped(
+        &mut self,
+        path: impl AsRef<Path>,
+        ids: &[NodeId],
+    ) -> Result<PathBuf, EditorError> {
+        let options = self.export_options_for(1.0, ids, true);
         let page = self.document.active_page_id();
         dp_io::export_page_to_file(
             &self.document,
@@ -824,7 +857,16 @@ impl EditorState {
 
     /// Exports a PDF of the selection (or the whole page).
     pub fn export_pdf(&mut self, path: impl AsRef<Path>) -> Result<PathBuf, EditorError> {
-        let options = self.export_options(1.0);
+        self.export_pdf_scoped(path, &[])
+    }
+
+    /// Exports a PDF for an explicit node scope.
+    pub fn export_pdf_scoped(
+        &mut self,
+        path: impl AsRef<Path>,
+        ids: &[NodeId],
+    ) -> Result<PathBuf, EditorError> {
+        let options = self.export_options_for(1.0, ids, false);
         let page = self.document.active_page_id();
         dp_io::export_page_to_file(
             &self.document,
@@ -846,6 +888,19 @@ impl EditorState {
     pub fn import_svg(
         &mut self,
         path: impl AsRef<Path>,
+    ) -> Result<(NodeId, Vec<String>), EditorError> {
+        self.import_svg_at(path, None, None)
+    }
+
+    /// Imports SVG artwork into a specific page and optional container.
+    ///
+    /// `target_page` defaults to the active page; `parent` must be a container
+    /// node on that page (defaults to the page root).
+    pub fn import_svg_at(
+        &mut self,
+        path: impl AsRef<Path>,
+        target_page: Option<PageId>,
+        parent: Option<NodeId>,
     ) -> Result<(NodeId, Vec<String>), EditorError> {
         let path = path.as_ref();
         let bytes =
@@ -874,7 +929,28 @@ impl EditorState {
         // the open document with fresh ids. `Page::insert_node` rebuilds the
         // parent/child links, so child lists are cleared here (pre-order inserts
         // then preserve sibling order).
-        let page = self.document.active_page_id();
+        let page = match target_page {
+            Some(id) => {
+                if self.document.page(id).is_none() {
+                    return Err(dp_model::ModelError::PageNotFound(id).into());
+                }
+                id
+            }
+            None => self.document.active_page_id(),
+        };
+        if let Some(parent_id) = parent {
+            let valid = self
+                .document
+                .page(page)
+                .and_then(|target| target.get(parent_id))
+                .map(|node| node.kind.is_container())
+                .unwrap_or(false);
+            if !valid {
+                return Err(EditorError::Unsupported(
+                    "SVG import target must be a container on the target page".to_owned(),
+                ));
+            }
+        }
         let mut transaction = Transaction::new("Import SVG");
         for id in &ids {
             let Some(source) = imported.document.node(*id) else {
@@ -882,7 +958,11 @@ impl EditorState {
             };
             let mut node = source.clone();
             node.id = remap[id];
-            node.parent = source.parent.and_then(|parent| remap.get(&parent).copied());
+            node.parent = if *id == imported.frame {
+                parent
+            } else {
+                source.parent.and_then(|parent| remap.get(&parent).copied())
+            };
             node.children.clear();
             node.rev = 0;
             transaction.push(Edit::InsertNode {
@@ -895,7 +975,9 @@ impl EditorState {
         }
         let root = remap[&imported.frame];
         self.apply(transaction)?;
-        self.select(root, false);
+        if page == self.document.active_page_id() {
+            self.select(root, false);
+        }
         self.status = if imported.warnings.is_empty() {
             format!("Imported {} as editable vectors", path.display())
         } else {
@@ -913,16 +995,46 @@ impl EditorState {
         ))
     }
 
-    fn export_options(&mut self, scale: f64) -> ExportOptions {
-        let bounds = self.selection_bounds();
+    fn export_options_for(
+        &mut self,
+        scale: f64,
+        ids: &[NodeId],
+        transparent: bool,
+    ) -> ExportOptions {
+        let explicit_bounds = if ids.is_empty() {
+            None
+        } else {
+            self.nodes_bounds(ids)
+        };
+        let bounds = explicit_bounds.or_else(|| self.selection_bounds());
+        let background = if transparent {
+            Some(Color::TRANSPARENT)
+        } else {
+            Some(self.document.active_page().background)
+        };
         ExportOptions {
             scale,
-            background: None,
+            background,
             bounds,
             clip: None,
             precision: 2,
             jpeg_quality: 90,
         }
+    }
+
+    /// Union of the world bounds of the given nodes (used by scoped exports).
+    pub fn nodes_bounds(&mut self, ids: &[NodeId]) -> Option<Rect> {
+        let mut bounds: Option<Rect> = None;
+        for id in ids {
+            let Some(rect) = self.node_bounds(*id) else {
+                continue;
+            };
+            bounds = Some(match bounds {
+                Some(current) => current.union(rect),
+                None => rect,
+            });
+        }
+        bounds
     }
 
     /// Starts editing the text of a node.

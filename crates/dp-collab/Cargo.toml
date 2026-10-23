@@ -7,6 +7,8 @@ license.workspace = true
 description = "Collaboration protocol: document operations, Lamport/vector clocks, convergent replicated tree state, presence, cursor tracking, conflict detection"
 
 [dependencies]
+dp-model = { path = "../dp-model" }
+dp-geom = { path = "../dp-geom" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }

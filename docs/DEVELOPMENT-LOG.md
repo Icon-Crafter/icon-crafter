@@ -168,3 +168,83 @@ deleted `target/debug/incremental` (3.42 GB) while investigating.
 - Backend unit tests must be re-run after the clippy refactor; PG integration awaits Docker.
 - Image import, wgpu backend, tile cache/benchmarks, collaboration wiring are explicitly
   pending (see `docs/FEATURE-CHECKLIST.md`).
+
+## Session 4 (2026-10-24)
+
+### Disk incident and build hygiene
+- A full engine test build filled the C: drive (8.77 GB `target`, ~10 MB free, rustc
+  `os error 112`). Freed it with `cargo clean`, removed leftover `target` (311 MB) and cleaned
+  the user temp directory reported by the backend teammate (33 GB); free space recovered to
+  44 GB.
+- Root workspace profile changed to `opt-level = 1`, `debug = 0`, `incremental = false` so
+  debug/test builds stay small on this machine. This only affects development artifacts, not
+  release output.
+- `.gitattributes` added (`* text=auto eol=lf`, binary asset patterns) to stop CRLF churn.
+
+### Backend committed
+- `apps/backend` committed as `a0cda62` after re-running its tests: `cargo test -p
+  iconcrafter-server --offline --lib` → 132 passed / 0 failed (5 PostgreSQL integration tests
+  remain `#[ignore]` because Docker is not installed on this host). Docker compose, Dockerfile,
+  README and `.env.example` ship with it.
+
+### dp-prototype: runtime engine
+- New `crates/dp-prototype` (was a stub) now contains the deterministic prototype runtime used
+  by both the editor preview and (future) shared prototype links:
+  - `expr.rs`: pure expression language (numbers/bools/strings, variables by name, arithmetic,
+    comparisons, short-circuit logic, parentheses; 64-deep safety budget) with parsing and
+    evaluation errors.
+  - `runtime.rs`: `PrototypeRuntime` with frame stack/history, overlay stack (position,
+    backdrop, open-progress), transitions (instant/dissolve/slide/smart, duration/easing/
+    spring), delayed and after-delay triggers, multiple actions per interaction, runtime
+    variables resolved from the document (aliases included), and `validate_flow` which checks
+    flow/action targets before playback.
+  - `PrototypeRuntime::start`/`start_flow`, `trigger`/`click`/`press_key`, `tick` (drives
+    transitions + timers), `back`, `close_overlay`, `set_variable`, `evaluate*`, `drain_events`
+    returning `RuntimeEvent`s the UI turns into pixels.
+- Tests: `cargo test -p dp-prototype` → 18 passed, 0 failed.
+
+### Lint gate
+- `cargo clippy --fix` applied ~60 machine fixes across the engine crates and the remaining
+  warnings were resolved manually (intentional `Mat2D::mul` inherent method, intentionally
+  large `Edit` enum, rasterizer checked division, dead code in page integrity check / SVG
+  importer / parser). The engine now passes:
+  `cargo clippy -p dp-geom -p dp-model -p dp-text -p dp-layout -p dp-render -p dp-io -p
+  dp-persist -p dp-editor -p dp-prototype --all-targets -- -D warnings`.
+- Engine suite re-run after the lint sweep: 44 + 65 + 13 + 12 + 6/11 + 9 + 13 + 19 = 192 tests
+  green, plus `dp-prototype` 18 → 210 engine tests total.
+
+### Next
+- Launch the Tauri app against the real UI bundle, run the manual checklist (create/move/edit
+  shapes and text, layers, inspector, zoom/pan, undo, save/reopen, PNG/SVG export), record
+  evidence and flip F17/E-rows to verified.
+- Wire `dp-prototype` playback into the editor IPC (`prototype_play/stop`) and the preview UI.
+- Continue with components/styles/variables authoring UI and collaboration transport.
+
+## Session 5 (2026-10-24) — collaboration core
+
+- Real end-to-end run of the Tauri app against the Vite dev server (WebView2 at
+  `localhost:1420`, remote debugging on 9222). Verified the shell renders, `bootstrap` /
+  `engine_state` / `pointer` / `command` round-trip, and that drawing a rectangle through real
+  IPC produces engine revision 2 with undo to revision 3.
+- Engine fixes from live use: new shapes get visible default fills (`#D9D9D9`; frames white,
+  lines black stroke), click-with-shape-tool creates a 100×100 layer instead of a 1×1, the
+  workspace backdrop is `#101318` instead of the white page background, text nodes get a
+  `#1F2430` fill, and the node being text-edited is hidden from the display list so the DOM
+  textarea is the only visible text.
+- IPC contract fixes: `render_frame.quality` accepts the numeric tier, `set_preference` returns
+  the updated preferences record, exports honour `node_ids` + `transparent`, SVG import honours
+  `page_id`/`parent_id`, and `bootstrap.capabilities` advertises real feature flags
+  (`export_scope`, `import_svg`, `canvas_text_edit`, `prototype`, …) so the UI can disable what
+  the engine cannot do.
+- Frontend milestone 2 landed alongside the engine fixes: capability-gated menus/dialogs,
+  scoped export dialog, SVG import targeting, 85 unit tests, strict `tsc` + Vite build, and
+  live-loop verification in the Tauri window.
+- `dp-collab` implemented (previously a stub): `clock.rs` (actor ids + hybrid logical clocks),
+  `rga.rs` (replicated growable arrays with tombstones and deterministic concurrent inserts),
+  `op.rs` (per-field LWW property ops, insert/delete/reparent/page/name ops, validated
+  envelopes, presence and conflict payloads), `replica.rs` (seed → apply → materialize a
+  converged `Document`). `cargo test -p dp-collab` → 19 passed; strict clippy pending.
+- Next: wire `dp-collab` into the desktop session and the Axum WebSocket relay (server already
+  has an op journal keyed by `(file_id, batch_id)`), then component/style/variable authoring UI.
+
+

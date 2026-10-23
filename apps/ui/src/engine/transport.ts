@@ -73,7 +73,8 @@ export interface EngineTransport {
   exportPdf(args: ExportPdf): Promise<ExportResult>;
   importSvg(args: { path: string; page_id?: string; parent_id?: string }): Promise<EngineState>;
   importImage(args: { path: string }): Promise<EngineState>;
-  setPreference(key: string, value: unknown): Promise<Bootstrap>;
+  /** Applies a preference and returns the updated preference map. */
+  setPreference(key: string, value: unknown): Promise<Record<string, unknown>>;
   pickSavePath(options: PickSaveOptions): Promise<string | null>;
   pickOpenPath(options?: PickOpenOptions): Promise<string | null>;
 }
@@ -223,8 +224,8 @@ export class TauriTransport implements EngineTransport {
     return invoke<EngineState>("import_image", args);
   }
 
-  setPreference(key: string, value: unknown): Promise<Bootstrap> {
-    return invoke<Bootstrap>("set_preference", { key, value });
+  setPreference(key: string, value: unknown): Promise<Record<string, unknown>> {
+    return invoke<Record<string, unknown>>("set_preference", { key, value });
   }
 
   async pickSavePath(options: PickSaveOptions): Promise<string | null> {

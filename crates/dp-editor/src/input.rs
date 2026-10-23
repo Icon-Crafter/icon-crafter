@@ -485,34 +485,43 @@ impl EditorState {
                 moved,
                 ..
             } => {
-                let final_node = self
+                let mut final_node = self
                     .document
                     .node(node_id)
                     .cloned()
                     .unwrap_or_else(|| Node::rectangle("Rectangle", 0.0, 0.0, 1.0, 1.0));
-                let too_small = final_node.transform.w < CLICK_TOLERANCE_CSS
-                    && final_node.transform.h < CLICK_TOLERANCE_CSS;
+                let too_small = final_node.transform.w.abs() < 2.0
+                    && final_node.transform.h.abs() < 2.0;
                 if !moved || too_small {
-                    if let Some(page_mut) = self.document.page_mut(page) {
-                        page_mut.remove_node(node_id);
+                    // Clicking with a shape tool creates a Figma-style default
+                    // layer instead of a degenerate zero-size node.
+                    if final_node.kind == NodeKind::Line {
+                        final_node.transform.w = 100.0;
+                        final_node.transform.h = 0.0;
+                    } else {
+                        final_node.transform.w = 100.0;
+                        final_node.transform.h = 100.0;
                     }
-                    self.selection.retain(|id| *id != node_id);
-                    self.invalidate_layout();
+                    self.status = format!("Created {} (default size)", final_node.name);
+                }
+                if let Some(page_mut) = self.document.page_mut(page) {
+                    page_mut.remove_node(node_id);
+                }
+                let mut transaction = Transaction::new("Create layer");
+                transaction.push(Edit::InsertNode {
+                    page,
+                    node: final_node.clone(),
+                    parent: final_node.parent,
+                    index: usize::MAX,
+                });
+                self.apply(transaction)?;
+                self.selection = vec![final_node.id];
+                if too_small || !moved {
+                    // status already explains the default size
                 } else {
-                    if let Some(page_mut) = self.document.page_mut(page) {
-                        page_mut.remove_node(node_id);
-                    }
-                    let mut transaction = Transaction::new("Create layer");
-                    transaction.push(Edit::InsertNode {
-                        page,
-                        node: final_node.clone(),
-                        parent: final_node.parent,
-                        index: usize::MAX,
-                    });
-                    self.apply(transaction)?;
-                    self.selection = vec![final_node.id];
                     self.status = format!("Created {}", final_node.name);
                 }
+                self.invalidate_layout();
             }
             DragState::Resizing { page, before, .. } => {
                 self.commit_edits(page, &before, "Resize")?;
@@ -841,10 +850,22 @@ impl EditorState {
             NodeKind::Star => "Star",
             _ => "Layer",
         };
-        let node = Node {
+        let mut node = Node {
             kind,
             name: name.to_owned(),
             ..Node::rectangle(name, world.x, world.y, 1.0, 1.0)
+        };
+        // New layers must be visible immediately: Figma-style defaults so a
+        // freshly drawn shape never looks like nothing happened.
+        node.style = match kind {
+            NodeKind::Frame => dp_model::NodeStyle::filled(dp_model::Color::WHITE),
+            NodeKind::Line => dp_model::NodeStyle {
+                strokes: vec![dp_model::Stroke::solid(dp_model::Color::BLACK)],
+                ..dp_model::NodeStyle::default()
+            },
+            _ => dp_model::NodeStyle::filled(
+                dp_model::Color::from_hex("#d9d9d9").unwrap_or(dp_model::Color::BLACK),
+            ),
         };
         let node_id = node.id;
         if let Some(page_mut) = self.document.page_mut(page) {
@@ -864,7 +885,13 @@ impl EditorState {
 
     fn create_text_node(&mut self, world: Point) -> Result<(), EditorError> {
         let page = self.document.active_page_id();
-        let node = Node::text("Text", "Text", world.x, world.y);
+        let mut node = Node::text("Text", "Text", world.x, world.y);
+        // Text needs an explicit colour; the model has no implicit text paint.
+        if let Some(text) = node.text.as_mut() {
+            text.style.fills = vec![dp_model::Fill::solid(
+                dp_model::Color::from_hex("#1f2430").unwrap_or(dp_model::Color::BLACK),
+            )];
+        }
         let node_id = node.id;
         if let Some(page_mut) = self.document.page_mut(page) {
             page_mut.insert_node(node.clone(), None, None)?;

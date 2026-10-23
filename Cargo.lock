@@ -1757,6 +1757,8 @@ dependencies = [
 name = "dp-collab"
 version = "0.1.0"
 dependencies = [
+ "dp-geom",
+ "dp-model",
  "indexmap 2.14.2",
  "serde",
  "serde_json",

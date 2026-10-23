@@ -19,7 +19,6 @@ use std::sync::Mutex;
 
 use dp_editor::commands::CommandOutcome;
 use dp_editor::input::{KeyInput, KeyKind, Modifiers, PointerInput, PointerKind, WheelInput};
-use dp_editor::snapshot::Snapshot;
 use dp_editor::{EditorError, EditorState, ToolId};
 use dp_model::DocKind;
 use serde::{Deserialize, Serialize};
@@ -122,8 +121,10 @@ pub struct PointerInputArgs {
     #[serde(default)]
     pub meta: bool,
     pub pressure: Option<f64>,
+    // The UI sends `performance.now()` which is fractional; accept a number and
+    // truncate to milliseconds for the engine's monotonic timestamp.
     #[serde(default)]
-    pub timestamp_ms: u64,
+    pub timestamp_ms: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -208,7 +209,7 @@ impl PointerInputArgs {
                 meta: self.meta,
             },
             pressure: self.pressure.unwrap_or(0.5),
-            timestamp_ms: self.timestamp_ms,
+            timestamp_ms: self.timestamp_ms.max(0.0) as u64,
         })
     }
 }
@@ -329,6 +330,11 @@ pub fn bootstrap(state: State<'_, IpcState>) -> Result<Value, IpcError> {
             "gpu": false,
             "dev_mode": true,
             "export_pdf": true,
+            "export_scope": true,
+            "import_svg": true,
+            "import_image": false,
+            "prototype": true,
+            "canvas_text_edit": true,
         },
     }))
 }
@@ -463,9 +469,22 @@ fn command_snapshot(editor: &mut EditorState, outcome: CommandOutcome) -> Result
 #[tauri::command]
 pub fn render_frame(
     state: State<'_, IpcState>,
-    quality: Option<String>,
+    // The contract types `quality` as a number; accept strings too so older
+    // clients do not break. The CPU reference renderer currently renders at the
+    // viewport's device resolution for every tier (tiers land with the tile
+    // cache / GPU backend).
+    quality: Option<Value>,
 ) -> Result<tauri::ipc::Response, IpcError> {
-    let _ = quality;
+    let _tier = match quality.as_ref() {
+        None | Some(Value::Null) => "high".to_owned(),
+        Some(Value::String(text)) => text.clone(),
+        Some(Value::Number(number)) => format!("level-{number}"),
+        Some(other) => {
+            return Err(IpcError::validation(format!(
+                "invalid render quality {other}"
+            )));
+        }
+    };
     with_editor(&state, |editor| {
         let frame = editor.render()?;
         // The frame id travels with the state snapshot; the contract's
@@ -491,9 +510,10 @@ pub fn node_details(state: State<'_, IpcState>, ids: Vec<String>) -> Result<Valu
 
 #[tauri::command]
 pub fn export_png(state: State<'_, IpcState>, args: ExportRasterArgs) -> Result<Value, IpcError> {
+    let ids = parse_node_ids(args.node_ids)?;
     with_editor(&state, |editor| {
         let path = PathBuf::from(&args.path);
-        let saved = editor.export_png(&path, args.scale)?;
+        let saved = editor.export_png_scoped(&path, args.scale, args.transparent, &ids)?;
         Ok(json!({
             "path": saved.display().to_string(),
             "bytes": file_size(&saved),
@@ -504,9 +524,10 @@ pub fn export_png(state: State<'_, IpcState>, args: ExportRasterArgs) -> Result<
 
 #[tauri::command]
 pub fn export_svg(state: State<'_, IpcState>, args: ExportVectorArgs) -> Result<Value, IpcError> {
+    let ids = parse_node_ids(args.node_ids)?;
     with_editor(&state, |editor| {
         let path = PathBuf::from(&args.path);
-        let saved = editor.export_svg(&path)?;
+        let saved = editor.export_svg_scoped(&path, &ids)?;
         Ok(json!({
             "path": saved.display().to_string(),
             "bytes": file_size(&saved),
@@ -517,9 +538,10 @@ pub fn export_svg(state: State<'_, IpcState>, args: ExportVectorArgs) -> Result<
 
 #[tauri::command]
 pub fn export_pdf(state: State<'_, IpcState>, args: ExportVectorArgs) -> Result<Value, IpcError> {
+    let ids = parse_node_ids(args.node_ids)?;
     with_editor(&state, |editor| {
         let path = PathBuf::from(&args.path);
-        let saved = editor.export_pdf(&path)?;
+        let saved = editor.export_pdf_scoped(&path, &ids)?;
         Ok(json!({
             "path": saved.display().to_string(),
             "bytes": file_size(&saved),
@@ -535,9 +557,10 @@ pub fn import_svg(
     page_id: Option<String>,
     parent_id: Option<String>,
 ) -> Result<Value, IpcError> {
-    let _ = (page_id, parent_id);
+    let page = parse_optional_id(page_id, "page id")?;
+    let parent = parse_optional_id(parent_id, "parent id")?;
     with_editor(&state, |editor| {
-        editor.import_svg(&path)?;
+        editor.import_svg_at(&path, page, parent)?;
         snapshot_json(editor)
     })
 }
@@ -558,7 +581,31 @@ pub fn set_preference(
 ) -> Result<Value, IpcError> {
     let mut inner = state.inner.lock().map_err(|_| lock_error())?;
     inner.preferences.insert(key, value);
-    Ok(Value::Null)
+    Ok(Value::Object(inner.preferences.clone()))
+}
+
+fn parse_node_ids(ids: Option<Vec<String>>) -> Result<Vec<dp_model::NodeId>, IpcError> {
+    let mut parsed = Vec::new();
+    for id in ids.unwrap_or_default() {
+        parsed.push(
+            id.parse()
+                .map_err(|_| IpcError::validation(format!("invalid node id '{id}'")))?,
+        );
+    }
+    Ok(parsed)
+}
+
+fn parse_optional_id<T: std::str::FromStr>(
+    value: Option<String>,
+    label: &str,
+) -> Result<Option<T>, IpcError> {
+    match value {
+        Some(text) => text
+            .parse()
+            .map(Some)
+            .map_err(|_| IpcError::validation(format!("invalid {label} '{text}'"))),
+        None => Ok(None),
+    }
 }
 
 /// Tool ids accepted by the engine, for diagnostics and tests.

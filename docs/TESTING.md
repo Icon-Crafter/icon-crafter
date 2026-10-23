@@ -77,3 +77,55 @@ Notes:
   debug artifacts exhausted the 19 GB free disk. Do not re-enable incremental blindly.
 * `apps/ui/dist` may temporarily be a placeholder until `pnpm --dir apps/ui build` succeeds;
   a placeholder is enough for `cargo check -p iconcrafter-desktop` but not for a real app run.
+
+## Session 4 verification (prototype runtime + lint gate)
+
+```pwsh
+# One engine suite, all default-members (excludes Tauri/server heavy trees):
+cargo test -p dp-geom -p dp-model -p dp-text -p dp-layout -p dp-render `
+  -p dp-io -p dp-persist -p dp-editor --no-default-features
+# Expected: 44 + 65 + 13 + 12 + (6 unit + 11 integration) + 9 + 13 + 19 = 192 passed.
+
+# Prototype runtime + expression language:
+cargo test -p dp-prototype                                  # 18 passed
+cargo clippy -p dp-prototype --all-targets -- -D warnings   # clean
+
+# Strict lint gate for all engine crates:
+cargo clippy -p dp-geom -p dp-model -p dp-text -p dp-layout -p dp-render `
+  -p dp-io -p dp-persist -p dp-editor -p dp-prototype `
+  --no-default-features --all-targets -- -D warnings
+# Expected: exit 0.
+```
+
+Notes:
+
+* `dp-prototype` is a pure runtime: it executes `dp-model` interactions without mutating the
+  document; tests cover navigation history, overlay stacking, transitions/timers, key triggers,
+  variables and flow validation.
+* Disk: after the incident the profile is `debug = 0` / `incremental = false`. Full engine test
+  builds use roughly 3-4 GB; do not run desktop + backend + engine builds simultaneously.
+
+## Session 5 verification — collaboration core
+
+```powershell
+# Engine collaboration protocol (19 tests: clocks, RGA convergence, LWW ops, replica materialization)
+cargo test -p dp-collab
+
+# Regression: the engine suite must stay green after editor/IPC changes
+cargo test -p dp-geom -p dp-model -p dp-text -p dp-layout -p dp-render -p dp-io -p dp-persist -p dp-editor
+```
+
+Live desktop check (real IPC, not the browser harness):
+
+```powershell
+# terminal 1
+pnpm --dir apps/ui dev --host 127.0.0.1 --port 1420
+# terminal 2 (debug builds use devUrl; WebView2 debugging lets you inspect the live page)
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=9222"
+cargo run -p iconcrafter-desktop
+```
+
+Expected: window titled `Untitled · Icon Crafter`, status bar badge `TAURI IPC`, drawing a
+rectangle yields revision 2 with a `#D9D9D9` fill, undo returns to revision 3, the inspector
+shows live X/Y/W/H, and the command palette/shortcuts work without console errors.
+

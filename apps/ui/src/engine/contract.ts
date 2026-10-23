@@ -688,12 +688,50 @@ export interface RecentFile {
   name: string;
 }
 
+/**
+ * Honest feature flags reported by the engine at bootstrap. Values are booleans,
+ * not promises: the UI uses them to disable controls that the running engine does
+ * not support yet (rather than letting them fail at call time).
+ */
+export interface Capabilities {
+  ai: boolean;
+  plugins: boolean;
+  collab: boolean;
+  gpu: boolean;
+  dev_mode: boolean;
+  export_pdf: boolean;
+  /** Scoped export (selection bounds) and transparent PNG backgrounds. */
+  export_scope: boolean;
+  import_svg: boolean;
+  import_image: boolean;
+  prototype: boolean;
+  canvas_text_edit: boolean;
+  /** Harness-only flag; absent in the desktop engine. */
+  dev_harness?: boolean;
+  [capability: string]: unknown;
+}
+
 export interface Bootstrap {
   app_version: string;
   recent_files: RecentFile[];
   preferences: Record<string, unknown>;
-  capabilities: Record<string, unknown>;
+  capabilities: Capabilities;
 }
+
+/** Fallbacks used before/without a bootstrap response; mirrors the current engine. */
+export const DEFAULT_CAPABILITIES: Capabilities = {
+  ai: false,
+  plugins: false,
+  collab: false,
+  gpu: false,
+  dev_mode: true,
+  export_pdf: true,
+  export_scope: true,
+  import_svg: true,
+  import_image: false,
+  prototype: true,
+  canvas_text_edit: true,
+};
 
 // ---------------------------------------------------------------------------
 // Helpers

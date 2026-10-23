@@ -29,7 +29,9 @@ Last updated: session 3 (engine vertical slice complete and green; desktop IPC c
 | F14 | `dp-io`: SVG export/import (editable vectors), PNG/JPEG raster export with scale, PDF export | verified | `cargo test -p dp-io` → 9 passed (2026-10-23) |
 | F15 | `dp-persist`: `.icraft` container, atomic save, recovery journal, schema validation | verified | `cargo test -p dp-persist` → 13 passed (2026-10-23) |
 | F16 | `dp-editor`: state machine, tools/selection/drags, snapping, commands, text sessions, undo, render/overlay, save/open/export | verified | `cargo test -p dp-editor` → 19 passed (2026-10-23) |
-| F17 | Desktop IPC layer (Tauri commands = contract) | implemented | `cargo check -p iconcrafter-desktop` passes; end-to-end launch pending UI milestone 2 |
+| F17 | Desktop IPC layer (Tauri commands = contract) | verified | `cargo check -p iconcrafter-desktop` passes; real window launch: WebView2 loaded the real UI (`TAURI IPC` badge), `engine_state`/`pointer`/`command` round-trips, rectangle create (rev 2) + undo (rev 3) verified live (2026-10-24) |
+| F18 | `dp-prototype`: deterministic runtime (interaction graph, triggers, actions, transitions, timers, variables, expression language, flow validation) | verified | `cargo test -p dp-prototype` → 18 passed (2026-10-24); preview UI and shareable links pending |
+| F19 | `dp-collab`: HLC/Lamport clocks + actor ids, RGA sibling ordering with tombstones, per-field LWW registers, delete/insert resurrection, page + document-name registers, validated op envelopes, presence/conflict payloads, converged document materialization | verified (engine) | `cargo test -p dp-collab` → 19 passed (2026-10-24); desktop↔server transport and live multi-client wiring pending |
 
 ## Design editor — Phase 3 vertical slice
 
@@ -106,12 +108,12 @@ Last updated: session 3 (engine vertical slice complete and green; desktop IPC c
 
 | # | Feature | Status | Evidence / notes |
 |---|---|---|---|
-| P1 | Interaction graph (frames/components), triggers click/hover/press/drag | planned | |
-| P2 | Actions: navigate, overlay open/close, scroll to, back | planned | |
-| P3 | Transitions: instant/dissolve/slide/smart animate, duration/easing/spring | planned | |
-| P4 | Variables + conditional logic, expressions, multiple actions | planned | |
-| P5 | Device/viewport presets, responsive preview, presentation mode, keyboard | planned | |
-| P6 | Shareable preview link (backend) | planned | |
+| P1 | Interaction graph (frames/components), triggers click/hover/press/drag | in progress | engine triggers click/hover/press/key/after-delay + runtime firing tested (dp-prototype); drag trigger + authoring UI not built |
+| P2 | Actions: navigate, overlay open/close, scroll to, back | implemented | runtime executes all six actions; tested incl overlay stack and back navigation; preview UI pending |
+| P3 | Transitions: instant/dissolve/slide/smart animate, duration/easing/spring | implemented | transition progress, spring easing and tick-driven completion tested; smart-animate pair matching (UI side) pending |
+| P4 | Variables + conditional logic, expressions, multiple actions | implemented | runtime variables, alias resolution, arithmetic/logic expression parser (8 expr tests) and multi-action chains tested |
+| P5 | Device/viewport presets, responsive preview, presentation mode, keyboard | in progress | device presets + keyboard triggers in engine; presentation mode UI pending |
+| P6 | Shareable preview link (backend) | planned | requires backend share links wired to prototype viewer |
 
 ## Dev Mode (Phase 5)
 

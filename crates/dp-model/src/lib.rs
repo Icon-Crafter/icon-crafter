@@ -31,8 +31,8 @@ pub mod variables;
 
 pub use color::Color;
 pub use document::{
-    AssetRegistry, ComponentMeta, ComponentRegistry, ComponentSetMeta, DocKind, Document,
-    DocumentSettings, FontAssetMeta, GridSettings, ImageAssetMeta, PrototypeFlow,
+    AssetRegistry, ComponentMeta, ComponentRegistry, ComponentSetMeta, DevicePreset, DocKind,
+    Document, DocumentSettings, FontAssetMeta, GridSettings, ImageAssetMeta, PrototypeFlow,
     PrototypeSettings, SCHEMA_VERSION,
 };
 pub use geometry::{
