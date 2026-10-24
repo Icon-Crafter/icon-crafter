@@ -79,3 +79,42 @@ The editor is fully usable offline. Two optional subsystems are built in:
   user grants, op-scoped sandbox, lifecycle and typed settings. Execution is
   host-provided (no third-party JS/WASM runtime yet); see
   `crates/dp-plugins/examples/hello-plugin/` and `docs/FEATURE-CHECKLIST.md`.
+
+## Build and run (verified commands)
+
+Prerequisites: Rust stable (1.90+), Node 22+/pnpm 10+, Windows WebView2 runtime
+(preinstalled on Windows 11). Docker is required only for the backend database/storage.
+
+```powershell
+# Frontend
+pnpm --dir apps/ui install
+pnpm --dir apps/ui build        # strict tsc + vite; writes apps/ui/dist
+
+# Desktop engine + shell
+cargo build -p iconcrafter-desktop
+# Dev flow: debug builds load http://localhost:1420, so keep this running in another terminal:
+pnpm --dir apps/ui dev
+
+# Self-contained app (embeds apps/ui/dist, no dev server needed):
+cargo build -p iconcrafter-desktop --release --features custom-protocol
+# → target/release/iconcrafter-desktop.exe
+```
+
+```powershell
+# Tests (engine, 13 crates)
+cargo test --no-default-features -p dp-geom -p dp-model -p dp-text -p dp-layout `
+  -p dp-render -p dp-io -p dp-persist -p dp-editor -p dp-collab -p dp-prototype `
+  -p dp-devmode -p dp-ai -p dp-plugins
+
+# Lint gate
+cargo clippy --no-default-features --all-targets -- -D warnings
+
+# Backend (needs Docker + PostgreSQL; see apps/backend/README.md)
+docker compose up -d postgres minio redis
+cargo test -p iconcrafter-server --offline --lib
+cargo run -p iconcrafter-server
+```
+
+On a machine where Docker/PostgreSQL is unavailable, the backend compiles and its unit
+tests run, but DB-backed integration tests and the live WS/HTTP flows remain unverified —
+the checklist marks them accordingly instead of pretending they passed.
