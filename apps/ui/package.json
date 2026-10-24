@@ -1,7 +1,7 @@
 {
   "name": "iconcrafter-ui",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Icon Crafter editor UI (React + TypeScript presentation layer for the Rust engine)",
   "type": "module",
   "scripts": {
