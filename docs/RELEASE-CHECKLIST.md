@@ -100,3 +100,32 @@ Verified with evidence (see DEVELOPMENT-LOG / TESTING):
 - [x] Benchmarks exist with reported numbers (docs/PERFORMANCE.md) and one optimization landed (spatial-index hit testing; per-frame layout rebuild removed).
 
 Still open for a release candidate: NSIS/MSI installer (cargo tauri build — needs the Tauri CLI), backend integration tests with a live Postgres (Docker not installed on this machine), dependency audit (cargo audit), accessibility pass, and workspace modules (whiteboard/slides/website) which are planned not implemented.
+
+## Status — session 20 (Windows installers)
+
+- [x] pnpm --dir apps/ui install installs @tauri-apps/cli 2.12.4 (devDependency) used for packaging.
+- [x] 	ools/package-windows.ps1 builds the production UI bundle and runs 	auri build with the workspace-relative
+  eforeBuildCommand (pnpm --dir ui build, cwd is pps/).
+- [x] NSIS installer: 	arget/release/bundle/nsis/Icon Crafter_0.1.0_x64-setup.exe (5.20 MiB).
+  Verified silent install (/S /D=<temp dir>) exit 0, installed iconcrafter-desktop.exe (19.4 MB) launched with
+  window title "Icon Crafter" and WebView2 CDP reachable, silent uninstall exit 0 and installation directory removed.
+- [x] MSI installer: 	arget/release/bundle/msi/Icon Crafter_0.1.0_x64_en-US.msi (8.30 MiB) built by the same
+  Tauri CLI run.
+- Honest gaps: installers are **unsigned** (Windows SmartScreen will warn), the upgrade path has not been exercised,
+  only Windows x64 is packaged (no macOS/Linux bundles), and no auto-updater is configured. Code signing requires a
+  certificate that this environment does not have.
+
+### MSI verification note (added after initial build)
+
+The MSI package is **per-machine by default**; a plain msiexec /i "<msi>" /qn in a non-elevated session fails
+with 1603 because silent install cannot show a UAC prompt (MSI_LUA: ... no credential elevation is possible).
+Verified working non-elevated path:
+
+``powershell
+msiexec /i "target\\release\\bundle\\msi\\Icon Crafter_0.1.0_x64_en-US.msi" /qn ALLUSERS=2 MSIINSTALLPERUSER=1
+``
+
+Exit 0; installs iconcrafter-desktop.exe (20,354,048 bytes), iconcrafter_desktop_lib.dll and an uninstall
+shortcut; the installed app launched with title "Icon Crafter" and its WebView2 debugging endpoint answered;
+msiexec /x <product-code> /qn exited 0 and removed the files/registry entry. Document this flag combination in
+installer docs; a per-machine install still needs an elevated user.

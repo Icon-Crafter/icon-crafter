@@ -378,3 +378,26 @@ Manual native check (standalone release):
 3. Invoke `import_image { path: "<any png>" }` through the WebView CDP connection.
 4. Canvas shows the image layer selected; export PNG/SVG includes it; undo removes layer + asset; save/reopen
    keeps the layer (embedded bytes).
+
+## Session 20 verification — Windows installers (NSIS + MSI)
+
+Requirements: Rust stable MSVC, Node 22+, pnpm, WebView2 runtime, network for the one-time Tauri NSIS/WiX tooling
+download.
+
+1. pnpm --dir apps/ui install (installs @tauri-apps/cli into pps/ui/node_modules).
+2. pwsh tools/package-windows.ps1 — builds pps/ui/dist, then runs 	auri build from pps/desktop
+   (eforeBuildCommand is pnpm --dir ui build because Tauri's cwd is pps/). Expected artifacts:
+   	arget/release/bundle/nsis/Icon Crafter_0.1.0_x64-setup.exe and
+   	arget/release/bundle/msi/Icon Crafter_0.1.0_x64_en-US.msi.
+3. NSIS install check (no admin needed): run the setup with /S /D=<temp dir>, confirm exit code 0, confirm
+   <temp dir>\iconcrafter-desktop.exe exists (~19.4 MB) and launches with title "Icon Crafter"; run
+   <temp dir>\uninstall.exe /S and confirm the directory is removed.
+4. MSI check: msiexec /i "<msi>" /qn (or with INSTALLDIR=...), confirm the product appears under
+   Uninstall, then msiexec /x <product code> /qn and confirm removal.
+5. Screenshot/notes: docs/assets/standalone-release.png (standalone), installers are unsigned — SmartScreen warns.
+
+### MSI note for automated verification
+
+Use per-user properties when the agent/session is not elevated:
+msiexec /i "<msi>" /qn ALLUSERS=2 MSIINSTALLPERUSER=1 (exit 0). Plain /qn on this per-machine package returns
+1603 because silent installs cannot request elevation. Uninstall with msiexec /x <product-code> /qn.

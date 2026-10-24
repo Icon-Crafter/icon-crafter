@@ -7,7 +7,7 @@ tested) · **verified** (verified end-to-end in the running app) · **blocked** 
 Rule: a feature is never marked implemented/verified because a button exists. Each row
 names the verification evidence in the development log or a test.
 
-Last updated: session 18 (AI assistant + plugin manager UIs verified in the standalone release; whiteboard sticky-note rendering; 328 engine tests + 153 frontend tests green).
+Last updated: session 20 (image import with embedded assets; Windows NSIS/MSI installers built and silent install/launch/uninstall verified; 337 engine tests + 153 frontend tests green).
 
 ## Foundation
 
@@ -167,7 +167,7 @@ Last updated: session 18 (AI assistant + plugin manager UIs verified in the stan
 | Q1 | Unit + integration tests across crates and server | implemented | engine + desktop IPC: 13 crates, **327 test results** in the last full run (geom 44, model 72, text 13, layout 12, render 20, io 9, persist 13, editor 40, collab 23, prototype 18, devmode 14, ai 19, plugins 23); backend: 132 unit tests green (`cargo test -p iconcrafter-server --offline --lib`); DB/WS integration tests are `#[ignore]` until Docker/Postgres is available |
 | Q2 | Benchmarks for large documents (10k nodes), reported numbers | implemented | `crates/dp-editor/examples/bench_editor.rs` builds 10,500 nodes and measures layout/render/hit-test/serialize/undo; measured numbers and honest gaps in docs/PERFORMANCE.md (render ~47 ms/frame in dev profile is above the 16 ms target — optimization listed next) |
 | Q3 | Dependency audit, secret scan, security review | in progress | no hardcoded secrets (env-based config); backend uses Argon2id/opaque session tokens; `cargo tree -d` duplicates reviewed but no vuln scanner run yet |
-| Q4 | Installers (Windows MSI/NSIS), upgrade path, reproducibility | planned | |
+| Q4 | Installers (Windows MSI/NSIS), upgrade path, reproducibility | implemented (Windows) | `tools/package-windows.ps1` builds the production UI + Tauri installers. Verified: NSIS `Icon Crafter_0.1.0_x64-setup.exe` (5.20 MiB) built from clean CLI run; silent install (`/S /D=<dir>`) exit 0, installed `iconcrafter-desktop.exe` (19.4 MB) launches with title "Icon Crafter" and WebView2 CDP reachable, uninstaller `/S` exit 0 removes the directory; MSI built via the same script. Honest gaps: installers are unsigned (SmartScreen warning), upgrade path not exercised, only Windows x64 packaged; macOS/Linux bundles untested |
 | Q5 | Accessibility pass (keyboard, focus, labels) | planned | |
 | Q6 | Offline/no-network operation for core editor | planned | |
 

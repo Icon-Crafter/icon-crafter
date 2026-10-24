@@ -118,3 +118,17 @@ cargo run -p iconcrafter-server
 On a machine where Docker/PostgreSQL is unavailable, the backend compiles and its unit
 tests run, but DB-backed integration tests and the live WS/HTTP flows remain unverified —
 the checklist marks them accordingly instead of pretending they passed.
+
+## Installers (Windows, verified)
+
+Build both installers with:
+
+``powershell
+pnpm --dir apps/ui install          # one-time: installs the Tauri CLI devDependency
+pwsh tools/package-windows.ps1     # UI build + NSIS + MSI
+``
+
+Artifacts land in 	arget/release/bundle/nsis/Icon Crafter_0.1.0_x64-setup.exe (NSIS, per-user install,
+~5.2 MiB) and 	arget/release/bundle/msi/Icon Crafter_0.1.0_x64_en-US.msi (~8.3 MiB). Silent install,
+launch and uninstall were verified (see docs/RELEASE-CHECKLIST.md and docs/TESTING.md). The installers are
+currently **unsigned**, so Windows SmartScreen shows a warning; code signing requires a certificate.

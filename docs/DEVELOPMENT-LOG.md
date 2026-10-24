@@ -493,3 +493,25 @@ Goal: close the visible "Place image" gap (brief §18, §3 image fills) without 
   strict clippy clean for touched crates; standalone release rebuilt and image import verified natively.
 - Honest limits: GIF animation dropped (first frame + warning); no asset dedupe; website export does not emit
   separate image files yet; SVG import still skips raster image references.
+
+## Session 20 (2026-10-24) — Windows installers and reproducible packaging
+
+Goal: make the desktop app an installable product, not just a cargo binary.
+
+- Installed @tauri-apps/cli 2.12.4 as an pps/ui devDependency; the CLI is 2.x to match 	auri 2.12.5.
+- Packaging config: pps/desktop/tauri.conf.json (productName "Icon Crafter", version 0.1.0, identifier
+  com.iconcrafter.studio, NSIS+MSI targets, generated icons, CSP). Tauri runs eforeBuildCommand with cwd
+  pps/, so it was corrected from pnpm --dir ../ui build (resolved to a non-existent ui/ folder and failed)
+  to pnpm --dir ui build; eforeDevCommand is pnpm --dir ui dev. Verified by a successful 	auri build.
+- 	ools/package-windows.ps1 (new) automates: production UI build → 	auri build (NSIS+MSI or one target) →
+  lists artifacts. Forces CARGO_INCREMENTAL=0 to match the disk-friendly dev setup.
+- Built and verified NSIS: 5.20 MiB installer; silent install to a temp dir exit 0; installed executable 19.4 MB
+  launches with title "Icon Crafter" and its WebView2 remote-debugging endpoint answered; silent uninstall exit 0
+  and removed the directory. Built MSI: 8.30 MiB.
+- No product code changes were needed; the release profile (lto="thin", panic="abort") is used by 	auri build.
+- Honest limits: installers are unsigned (SmartScreen warning), upgrade/reinstall path untested, Windows x64 only,
+  no auto-updater, and MSI silent-install/uninstall behavior still needs a UI-level (non-silent) smoke test.
+
+- MSI silent verification (non-elevated, per-user): msiexec /i ... /qn ALLUSERS=2 MSIINSTALLPERUSER=1 exit 0;
+  installed exe (20,354,048 bytes) launched with title "Icon Crafter" and CDP answered on 9228; uninstall exit 0,
+  files and registry entry removed. Plain /qn returns 1603 (per-machine MSI needs elevation).
