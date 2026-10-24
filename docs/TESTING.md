@@ -355,3 +355,26 @@ example with Enable/Settings/Remove and capability-gated entry points. Evidence:
 Rust: `cargo test -p dp-render --no-default-features` → 21 passed (new sticky
 note render test). Full engine suite: **328 test results, 0 failed**; frontend
 `pnpm test` 153/153; backend `cargo test -p iconcrafter-server --lib` 132 passed.
+
+## Session 19 verification — image import + rendering
+
+`powershell
+cargo test -p dp-model --no-default-features   # 72 passed
+cargo test -p dp-io --no-default-features      # 19 passed (image import + svg/website/pdf)
+cargo test -p dp-render --no-default-features  # 23 passed (6 unit + 17 integration)
+cargo test -p dp-editor --no-default-features  # 43 passed (imaging: import/undo/save-reopen)
+cargo clippy -p dp-model -p dp-io -p dp-render -p dp-editor --all-targets -- -D warnings
+cargo fmt --all -- --check
+cargo check -p iconcrafter-desktop             # after capability + command update
+`
+
+Expected engine total: **337 test results, 0 failed** (13 crates). Frontend stays 153/153; backend 132 unit tests.
+
+Manual native check (standalone release):
+
+1. `cargo build -p iconcrafter-desktop --release --features custom-protocol`
+2. Launch `target\release\iconcrafter-desktop.exe` with
+   `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9225`.
+3. Invoke `import_image { path: "<any png>" }` through the WebView CDP connection.
+4. Canvas shows the image layer selected; export PNG/SVG includes it; undo removes layer + asset; save/reopen
+   keeps the layer (embedded bytes).

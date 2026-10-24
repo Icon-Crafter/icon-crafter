@@ -342,7 +342,7 @@ pub fn bootstrap(state: State<'_, IpcState>) -> Result<Value, IpcError> {
             "export_html": true,
             "export_scope": true,
             "import_svg": true,
-            "import_image": false,
+            "import_image": true,
             "prototype": true,
             "canvas_text_edit": true,
         },
@@ -591,8 +591,24 @@ pub fn import_svg(
 #[tauri::command]
 pub fn import_image(state: State<'_, IpcState>, path: String) -> Result<Value, IpcError> {
     with_editor(&state, |editor| {
-        editor.import_image(&path)?;
-        snapshot_json(editor)
+        let (node_id, warnings) = editor.import_image(&path)?;
+        let mut snapshot = snapshot_json(editor)?;
+        if let Some(object) = snapshot.as_object_mut() {
+            object.insert(
+                "imported_node_id".to_owned(),
+                serde_json::Value::String(node_id.to_string()),
+            );
+            object.insert(
+                "warnings".to_owned(),
+                serde_json::Value::Array(
+                    warnings
+                        .into_iter()
+                        .map(serde_json::Value::String)
+                        .collect(),
+                ),
+            );
+        }
+        Ok(snapshot)
     })
 }
 

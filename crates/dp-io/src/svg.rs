@@ -10,6 +10,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
+use base64::Engine as _;
 use dp_geom::{FillRule, Point, Rect, VectorPath};
 use dp_model::{Color, Document, PageId};
 use dp_render::{DisplayList, SceneItem, ScenePaint, SceneShape, SceneStroke, SceneText};
@@ -128,6 +129,9 @@ impl Defs {
                 self.paints.insert(id, value.clone());
                 value
             }
+            // Image fills are emitted as embedded raster `<image>` elements by
+            // `write_item`; this fallback is never referenced.
+            ScenePaint::Image { .. } => SvgPaint::Solid("none".to_owned()),
         }
     }
 }
@@ -267,6 +271,31 @@ fn write_item(body: &mut String, item: &SceneItem, defs: &mut Defs, precision: u
         let data = path_to_svg(path, precision);
         if !data.is_empty() {
             for fill in &item.fills {
+                if let ScenePaint::Image {
+                    width,
+                    height,
+                    data,
+                    fit,
+                } = &fill.paint
+                {
+                    if let Some(url) = image_data_url(*width, *height, data) {
+                        let _ = writeln!(
+                            body,
+                            "    <image x=\"0\" y=\"0\" width=\"{w}\" height=\"{h}\" preserveAspectRatio=\"{par}\" opacity=\"{opacity}\" href=\"{url}\"/>",
+                            w = number(item.local_size.w.max(0.0), precision),
+                            h = number(item.local_size.h.max(0.0), precision),
+                            par = match fit {
+                                dp_model::ImageFit::Fill => "none",
+                                dp_model::ImageFit::Crop => "xMidYMid slice",
+                                dp_model::ImageFit::Fit | dp_model::ImageFit::Tile => {
+                                    "xMidYMid meet"
+                                }
+                            },
+                            opacity = number(fill.opacity, 3),
+                        );
+                    }
+                    continue;
+                }
                 let paint = defs.register(&fill.paint, scene_stops_from_scene(&fill.paint));
                 let _ = writeln!(
                     body,
@@ -311,7 +340,19 @@ fn scene_stops_from_scene(paint: &ScenePaint) -> Vec<(f64, Color)> {
         ScenePaint::Linear { stops, .. } | ScenePaint::Radial { stops, .. } => {
             stops.iter().map(|s| (s.position, s.color)).collect()
         }
+        ScenePaint::Image { .. } => Vec::new(),
     }
+}
+
+/// Encodes straight-alpha RGBA pixels as a PNG data URL for SVG embedding.
+fn image_data_url(width: u32, height: u32, data: &[u8]) -> Option<String> {
+    let pixels = image::RgbaImage::from_raw(width, height, data.to_vec())?;
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgba8(pixels)
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .ok()?;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(png);
+    Some(format!("data:image/png;base64,{encoded}"))
 }
 
 fn cap_name(stroke: &SceneStroke) -> &'static str {

@@ -569,3 +569,15 @@ The CPU reference renderer now renders whiteboard **sticky notes** (rounded box
 from node style + editable text through the text engine). Connectors still
 render as wireframe-only placeholders; whiteboard tables/freehand-tool UI are
 not implemented yet — the checklist records them as planned.
+### §16 Image import and rendering (v1.8, 2026-10-24 (session 19, image import + rendering))
+
+- `import_image { path }` now imports real raster images (PNG, JPEG, WebP, GIF first frame) and returns
+  `EngineState` plus additive fields `imported_node_id` and `warnings`. The image becomes an editable
+  rectangle layer with an image fill, selected after import. Encoded bytes are embedded in the document
+  (base64, max 24 MiB inline / 32 MiB source / 16384 px edge / 64 MP) so `.icraft` files are self-contained.
+- `bootstrap.capabilities.import_image` is now `true`.
+- The CPU renderer rasterizes image fills (Fill/Fit/Crop; Tile approximates Fit), SVG export embeds image data
+  URLs, and PNG/JPEG/PDF exports include images through the same display list.
+- Limitations: GIF animation is not preserved (first frame only, warning emitted); image fills inside SVG import
+  are still skipped with warnings; website export does not yet copy image assets as separate files; no asset
+  dedupe across documents; embedded data increases file size (by design, documented in DOCUMENT-FORMAT.md).

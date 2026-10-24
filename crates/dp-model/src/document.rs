@@ -193,6 +193,13 @@ pub struct ImageAssetMeta {
     pub mime: String,
     /// File name inside the container (`assets/images/<file>`).
     pub file: String,
+    /// Optional inline base64 payload (PNG/JPEG bytes).
+    ///
+    /// Schema v1 documents produced before image support omit this field. It is
+    /// optional, but an asset without inline data can only be rendered as a
+    /// placeholder once the file blob is unavailable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_base64: Option<String>,
 }
 
 /// Metadata for an embedded font.
@@ -220,7 +227,7 @@ pub struct FontAssetMeta {
 }
 
 /// Document-wide asset registry.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AssetRegistry {
     /// Image assets by id.
     #[serde(default)]

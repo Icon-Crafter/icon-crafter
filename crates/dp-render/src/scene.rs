@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use dp_geom::{FillRule, Mat2D, Point, Rect, VectorPath};
+use dp_geom::{FillRule, Mat2D, Point, Rect, Size, VectorPath};
 use dp_model::{BlendMode, Color, NodeId, StrokeAlign};
 use dp_text::TextLayout;
 
@@ -42,6 +42,17 @@ pub enum ScenePaint {
         radius: f64,
         /// Sorted stops.
         stops: Vec<SceneStop>,
+    },
+    /// Raster image in straight-alpha RGBA8, decoded when the scene is built.
+    Image {
+        /// Pixel width of the embedded image.
+        width: u32,
+        /// Pixel height of the embedded image.
+        height: u32,
+        /// Straight-alpha RGBA8 pixels (`width * height * 4` bytes).
+        data: Arc<Vec<u8>>,
+        /// How the image fits the node box.
+        fit: dp_model::ImageFit,
     },
 }
 
@@ -117,6 +128,8 @@ pub struct SceneItem {
     pub node_id: NodeId,
     /// Node-local to device-pixel matrix (includes the viewport).
     pub matrix: Mat2D,
+    /// Size of the node box in local units (used by paints like images).
+    pub local_size: Size,
     /// Axis-aligned bounds in document coordinates.
     pub world_bounds: Rect,
     /// Accumulated clip rectangle in document coordinates.

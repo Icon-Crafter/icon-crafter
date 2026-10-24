@@ -391,3 +391,11 @@ deviations, which are the authoritative behaviour of the current build:
 * **Node `rev`** is bumped by edits and used by the collaboration layer to detect
   concurrent modifications; it is not a version-history revision.
 
+
+### Image assets (session 19)
+
+- `ImageAssetMeta.data_base64` (optional, additive) stores embedded PNG/JPEG/WebP/GIF bytes as standard base64 so
+  the `.icraft` container is self-contained. Limits enforced by `dp_io::import_image` and document
+  validation: source <= 32 MiB, inline base64 <= 24 MiB, edge <= 16384 px, pixels <= 64 MP.
+- Documents without inline data remain valid (older files); the renderer warns when an image fill cannot be
+  resolved instead of drawing silently-wrong pixels.

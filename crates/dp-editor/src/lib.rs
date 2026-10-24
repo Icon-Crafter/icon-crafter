@@ -1360,13 +1360,69 @@ impl EditorState {
         Ok((root, imported.warnings))
     }
 
-    /// Image import needs the asset-storage pipeline (hash, dedupe, embedded
-    /// bytes); it is intentionally not faked here.
-    pub fn import_image(&mut self, _path: impl AsRef<Path>) -> Result<(), EditorError> {
-        Err(EditorError::Unsupported(
-            "image import is not implemented yet: it lands with the asset-storage milestone"
-                .to_owned(),
-        ))
+    /// Imports a raster image (PNG/JPEG/WebP/GIF) as an editable image layer.
+    ///
+    /// The encoded bytes are embedded in the document as base64 so the saved
+    /// `.icraft` file is self-contained. The layer is centred in the current
+    /// viewport and scaled down to fit comfortably.
+    pub fn import_image(
+        &mut self,
+        path: impl AsRef<Path>,
+    ) -> Result<(NodeId, Vec<String>), EditorError> {
+        let imported = dp_io::import_image_file(path.as_ref())?;
+        let asset = imported.asset;
+        let asset_id = asset.id;
+        let visible = self.viewport.visible_world_rect();
+        let max_width = visible.w.max(1.0) * 0.6;
+        let max_height = visible.h.max(1.0) * 0.6;
+        let scale = (max_width / asset.width.max(1) as f64)
+            .min(max_height / asset.height.max(1) as f64)
+            .min(1.0);
+        let width = (asset.width as f64 * scale).max(1.0);
+        let height = (asset.height as f64 * scale).max(1.0);
+        let x = visible.x + (visible.w - width) / 2.0;
+        let y = visible.y + (visible.h - height) / 2.0;
+
+        let mut node = dp_model::Node::rectangle(&imported.file_name, x, y, width, height);
+        node.style.fills = vec![dp_model::Fill {
+            visible: true,
+            opacity: 1.0,
+            blend: dp_model::BlendMode::Normal,
+            paint: dp_model::Paint::Image {
+                asset_id,
+                fit: dp_model::ImageFit::Fill,
+                transform: None,
+            },
+            style_id: None,
+            variable_id: None,
+        }];
+        let node_id = node.id;
+
+        let mut assets = self.document.assets.clone();
+        assets.images.insert(asset_id, asset);
+        let mut transaction = dp_model::Transaction::new("Import image");
+        transaction.push(dp_model::Edit::SetAssets {
+            before: self.document.assets.clone(),
+            after: assets,
+        });
+        transaction.push(dp_model::Edit::InsertNode {
+            page: self.document.active_page_id(),
+            node,
+            parent: None,
+            index: usize::MAX,
+        });
+        transaction = transaction.with_selection(self.selection.clone(), vec![node_id]);
+        self.apply(transaction)?;
+        self.select(node_id, false);
+        self.status = if imported.warnings.is_empty() {
+            format!(
+                "Imported {} as an editable image layer",
+                path.as_ref().display()
+            )
+        } else {
+            imported.warnings.join("; ")
+        };
+        Ok((node_id, imported.warnings))
     }
 
     fn export_options_for(

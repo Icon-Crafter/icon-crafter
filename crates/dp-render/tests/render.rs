@@ -3,10 +3,12 @@
 //! These exercise the real pipeline: document model -> layout -> display list
 //! -> tiny-skia raster -> pixels. They are the visual regression baseline.
 
+use base64::Engine as _;
 use dp_geom::{Point, Size};
 use dp_model::{
-    Color, Document, Fill, FillRule as ModelFillRule, Node, NodeGeometry, NodeId, NodeKind,
-    NodeStyle, PageId, Paint, Stroke, StyleId, Transform, VariableId,
+    AssetId, BlendMode, Color, Document, Fill, FillRule as ModelFillRule, ImageAssetMeta, ImageFit,
+    Node, NodeGeometry, NodeId, NodeKind, NodeStyle, PageId, Paint, Stroke, StyleId, Transform,
+    VariableId,
 };
 use dp_render::{RenderTarget, SceneBuilder, Viewport, render_page_png};
 use dp_text::TextEngine;
@@ -376,7 +378,10 @@ fn sticky_note_renders_background_and_editable_text() {
     let target = render(&document, page, &viewport(240.0, 180.0));
     // Background pixel near the bottom-right corner of the note (away from text).
     let corner = target.pixel_straight(190, 120).expect("pixel in target");
-    assert!(corner[3] > 200, "sticky background must be opaque: {corner:?}");
+    assert!(
+        corner[3] > 200,
+        "sticky background must be opaque: {corner:?}"
+    );
     assert!(
         corner[0] > 200 && corner[1] > 140 && corner[2] < 140,
         "sticky background must be the note colour: {corner:?}"
@@ -385,12 +390,94 @@ fn sticky_note_renders_background_and_editable_text() {
     let mut dark = 0u32;
     for y in 20..130 {
         for x in 20..200 {
-            if let Some(px) = target.pixel_straight(x, y) {
-                if px[3] > 128 && px[0] < 90 && px[1] < 90 && px[2] < 110 {
-                    dark += 1;
-                }
+            if let Some(px) = target.pixel_straight(x, y)
+                && px[3] > 128
+                && px[0] < 90
+                && px[1] < 90
+                && px[2] < 110
+            {
+                dark += 1;
             }
         }
     }
     assert!(dark > 10, "expected dark text pixels, found {dark}");
+}
+
+fn encode_red_png() -> String {
+    let pixels = image::RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255]));
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgba8(pixels)
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .expect("png encodes");
+    base64::engine::general_purpose::STANDARD.encode(png)
+}
+
+fn image_asset(document: &mut Document) -> AssetId {
+    let asset_id = AssetId::new_v4();
+    document.assets.images.insert(
+        asset_id,
+        ImageAssetMeta {
+            id: asset_id,
+            name: "red".to_owned(),
+            hash: "test-hash".to_owned(),
+            width: 2,
+            height: 2,
+            mime: "image/png".to_owned(),
+            file: "red.png".to_owned(),
+            data_base64: Some(encode_red_png()),
+        },
+    );
+    asset_id
+}
+
+fn image_fill(asset_id: AssetId) -> Fill {
+    Fill {
+        visible: true,
+        opacity: 1.0,
+        blend: BlendMode::Normal,
+        paint: Paint::Image {
+            asset_id,
+            fit: ImageFit::Fill,
+            transform: None,
+        },
+        style_id: None,
+        variable_id: None,
+    }
+}
+
+#[test]
+fn image_fill_renders_decoded_asset_pixels() {
+    let (mut document, page) = doc_and_page();
+    let asset_id = image_asset(&mut document);
+    let mut rect = Node::rectangle("Photo", 10.0, 10.0, 20.0, 20.0);
+    rect.style.fills = vec![image_fill(asset_id)];
+    add(&mut document, page, rect, None);
+
+    let target = render(&document, page, &viewport(60.0, 60.0));
+    let px = target.pixel_straight(15, 15).expect("pixel in target");
+    assert!(
+        px[3] > 200 && px[0] > 200 && px[1] < 80 && px[2] < 80,
+        "image fill must paint decoded red pixels: {px:?}"
+    );
+}
+
+#[test]
+fn missing_image_asset_warns_instead_of_crashing() {
+    let (mut document, page) = doc_and_page();
+    let mut rect = Node::rectangle("Photo", 10.0, 10.0, 20.0, 20.0);
+    rect.style.fills = vec![image_fill(AssetId::new_v4())];
+    add(&mut document, page, rect, None);
+
+    let mut text = TextEngine::new();
+    let list = SceneBuilder::new(&document)
+        .build(page, viewport(60.0, 60.0).visible_world_rect(), &mut text)
+        .expect("display list builds");
+    assert!(
+        list.warnings
+            .iter()
+            .any(|warning| warning.contains("image fill could not be rendered")),
+        "expected an explicit image warning, got {:?}",
+        list.warnings
+    );
+    RenderTarget::render(&list, &viewport(60.0, 60.0), &mut text).expect("render succeeds");
 }

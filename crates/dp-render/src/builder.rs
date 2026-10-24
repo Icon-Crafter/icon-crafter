@@ -8,6 +8,8 @@
 
 use std::sync::Arc;
 
+use base64::Engine as _;
+
 use dp_geom::{FillRule as GeomFillRule, Mat2D, Point, Rect, Size, VectorPath};
 use dp_layout::LayoutMap;
 use dp_model::{
@@ -444,7 +446,7 @@ impl Builder<'_> {
                 self.list
                     .warn("image fills are not rendered by the CPU renderer yet");
             }
-            NodeKind::Slice | NodeKind::Sticky | NodeKind::Connector => {}
+            NodeKind::Slice | NodeKind::Connector => {}
         }
 
         if matches!(
@@ -516,6 +518,17 @@ impl Builder<'_> {
                 .warn("inside/outside stroke alignment is approximated with a centred stroke");
         }
 
+        if fills.is_empty()
+            && node
+                .style
+                .fills
+                .iter()
+                .any(|fill| fill.visible && matches!(fill.paint, Paint::Image { .. }))
+        {
+            self.list
+                .warn("image fill could not be rendered: missing or invalid inline image data");
+        }
+
         if matches!(shape, SceneShape::Empty) && text_payload.is_none() {
             return None;
         }
@@ -523,6 +536,7 @@ impl Builder<'_> {
         Some(SceneItem {
             node_id: node.id,
             matrix,
+            local_size: size,
             world_bounds,
             clip,
             opacity,
@@ -562,6 +576,9 @@ impl Builder<'_> {
                     ScenePaint::Linear { stops, .. } | ScenePaint::Radial { stops, .. } => {
                         stops.first().map(|stop| stop.color).unwrap_or(Color::BLACK)
                     }
+                    // Text over an image fill: the glyph colour comes from the
+                    // text style; fall back to black rather than sampling.
+                    ScenePaint::Image { .. } => Color::BLACK,
                 };
             }
         }
@@ -642,9 +659,42 @@ impl Builder<'_> {
         if let Some(style_id) = style_id
             && let Some(shared) = self.document.styles.paint(style_id)
         {
-            return paint_to_scene(&shared.paint, size);
+            return self.paint_to_scene(&shared.paint, size);
+        }
+        self.paint_to_scene(paint, size)
+    }
+
+    /// Resolves one paint, decoding inline image assets when needed.
+    fn paint_to_scene(&self, paint: &Paint, size: Size) -> Option<ScenePaint> {
+        if let Paint::Image { asset_id, fit, .. } = paint {
+            return self.decode_image_asset(*asset_id, *fit);
         }
         paint_to_scene(paint, size)
+    }
+
+    /// Decodes an inline image asset into a scene paint.
+    fn decode_image_asset(
+        &self,
+        asset_id: dp_model::AssetId,
+        fit: dp_model::ImageFit,
+    ) -> Option<ScenePaint> {
+        let meta = self.document.assets.images.get(&asset_id)?;
+        let encoded = meta.data_base64.as_ref()?;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .ok()?;
+        let decoded = image::load_from_memory(&bytes).ok()?;
+        let rgba = decoded.to_rgba8();
+        let (width, height) = rgba.dimensions();
+        if width == 0 || height == 0 || width > 16384 || height > 16384 {
+            return None;
+        }
+        Some(ScenePaint::Image {
+            width,
+            height,
+            data: Arc::new(rgba.into_raw()),
+            fit,
+        })
     }
 
     /// The active variable mode used for paint resolution.

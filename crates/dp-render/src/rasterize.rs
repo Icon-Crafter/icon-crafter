@@ -207,6 +207,27 @@ fn draw_item(
             draw_shadow(target, item, shadow, &tiny_path, viewport_transform, mask);
         }
         for fill in &item.fills {
+            if let ScenePaint::Image {
+                width,
+                height,
+                data,
+                fit,
+            } = &fill.paint
+            {
+                draw_image_fill(
+                    target,
+                    item,
+                    *width,
+                    *height,
+                    data,
+                    *fit,
+                    fill.opacity,
+                    transform,
+                    blend,
+                    mask,
+                );
+                continue;
+            }
             if let Some(shader) = to_shader(&fill.paint, fill.opacity) {
                 let paint = TinyPaint {
                     shader,
@@ -352,8 +373,89 @@ pub fn to_tiny_path(path: &VectorPath) -> Option<Path> {
     if any { builder.finish() } else { None }
 }
 
+/// Converts straight-alpha RGBA8 bytes into a premultiplied tiny-skia pixmap.
+fn premultiplied_pixmap(width: u32, height: u32, data: &[u8]) -> Option<Pixmap> {
+    let pixels = width as usize * height as usize;
+    if width == 0 || height == 0 || data.len() < pixels * 4 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(pixels * 4);
+    for pixel in data[..pixels * 4].as_chunks::<4>().0 {
+        let alpha = pixel[3] as u32;
+        if alpha == 0 {
+            out.extend_from_slice(&[0, 0, 0, 0]);
+        } else {
+            out.push(((pixel[0] as u32 * alpha + 127) / 255) as u8);
+            out.push(((pixel[1] as u32 * alpha + 127) / 255) as u8);
+            out.push(((pixel[2] as u32 * alpha + 127) / 255) as u8);
+            out.push(alpha as u8);
+        }
+    }
+    Pixmap::from_vec(out, IntSize::from_wh(width, height)?)
+}
+
+/// Draws a raster image fill inside the item's node-local box.
+#[allow(clippy::too_many_arguments)]
+fn draw_image_fill(
+    target: &mut Pixmap,
+    item: &SceneItem,
+    width: u32,
+    height: u32,
+    data: &std::sync::Arc<Vec<u8>>,
+    fit: dp_model::ImageFit,
+    opacity: f64,
+    item_transform: Transform,
+    blend: TinyBlend,
+    mask: Option<&Mask>,
+) {
+    let Some(pixmap) = premultiplied_pixmap(width, height, data) else {
+        return;
+    };
+    let box_w = item.local_size.w.max(0.0);
+    let box_h = item.local_size.h.max(0.0);
+    if box_w <= 0.0 || box_h <= 0.0 {
+        return;
+    }
+    let image_w = width as f64;
+    let image_h = height as f64;
+    let (width_scale, height_scale) = match fit {
+        dp_model::ImageFit::Fill => (box_w / image_w, box_h / image_h),
+        dp_model::ImageFit::Crop => {
+            let scale = (box_w / image_w).max(box_h / image_h);
+            (scale, scale)
+        }
+        dp_model::ImageFit::Fit | dp_model::ImageFit::Tile => {
+            let scale = (box_w / image_w).min(box_h / image_h);
+            (scale, scale)
+        }
+    };
+    let drawn_w = image_w * width_scale;
+    let drawn_h = image_h * height_scale;
+    let offset_x = (box_w - drawn_w) / 2.0;
+    let offset_y = (box_h - drawn_h) / 2.0;
+    let local = Transform::from_translate(offset_x as f32, offset_y as f32).pre_concat(
+        Transform::from_scale(width_scale as f32, height_scale as f32),
+    );
+    let paint = PixmapPaint {
+        opacity: opacity.clamp(0.0, 1.0) as f32,
+        blend_mode: blend,
+        quality: FilterQuality::Bilinear,
+    };
+    if let Some(reference) = PixmapRef::from_bytes(pixmap.data(), width, height) {
+        target.draw_pixmap(
+            0,
+            0,
+            reference,
+            &paint,
+            item_transform.pre_concat(local),
+            mask,
+        );
+    }
+}
+
 fn to_shader(paint: &ScenePaint, opacity: f64) -> Option<Shader<'static>> {
     match paint {
+        ScenePaint::Image { .. } => None,
         ScenePaint::Solid(color) => Some(Shader::SolidColor(to_tiny_color(*color, opacity))),
         ScenePaint::Linear { from, to, stops } => LinearGradient::new(
             tiny_point(*from),

@@ -472,3 +472,24 @@ HTML/CSS part of §18, without pretending it is a production site generator.
 - Remaining honest gaps (unchanged): image import/assets, collaboration transport
   wiring to the Axum WS relay, whiteboard/slides/drawing/website UI workspaces,
   connectors/tables, Docker-based backend integration verification, installers.
+
+## Session 19 — image import and rendering (2026-10-24)
+
+Goal: close the visible "Place image" gap (brief §18, §3 image fills) without faking assets.
+
+- dp-model: `ImageAssetMeta.data_base64` inline payload; `Edit::SetAssets` for undoable asset registry
+  changes; validation rules for oversized/invalid image data; AssetRegistry PartialEq for undo snapshots.
+- dp-io: new `image_import` module (sniffing, decoding, limits, sha256 hash, sanitized names, GIF warning);
+  `import_image_bytes` / `import_image_file`; SVG export now embeds resolved image fills as data URLs;
+  dp-io tests 19.
+- dp-render: `ScenePaint::Image` with decoded straight-alpha RGBA; builder decodes inline assets and warns for
+  missing data; rasterizer draws images with fit math, opacity, blend and clip; tests 23 (6 unit + 17 integration:
+  solid/pan/zoom/opacity/gradient/stroke/clip/text/culling/PNG/layout/boolean/shadow/sticky/image/image-missing).
+- dp-editor: real `import_image(path) -> (NodeId, warnings)` creating a centred, viewport-scaled layer with one
+  undoable transaction (SetAssets + InsertNode); 3 new integration tests (import, undo/redo, save+reopen with
+  embedded bytes). `cargo test -p dp-editor` -> 43 tests.
+- apps/desktop: capability `import_image: true`; command returns snapshot + warnings.
+- Verified: dp-model 72, dp-io 19, dp-render 23, dp-editor 43; full engine suite **337** tests, 0 failed; fmt and
+  strict clippy clean for touched crates; standalone release rebuilt and image import verified natively.
+- Honest limits: GIF animation dropped (first frame + warning); no asset dedupe; website export does not emit
+  separate image files yet; SVG import still skips raster image references.

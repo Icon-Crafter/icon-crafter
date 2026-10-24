@@ -1,4 +1,4 @@
-//! Import/export for Icon Crafter.
+﻿//! Import/export for Icon Crafter.
 //!
 //! * [`svg`] exports the display list as editable SVG.
 //! * [`import`] imports SVG (vector paths; raster images and text are counted
@@ -8,6 +8,7 @@
 //!
 //! The native document format itself lives in `dp-persist`.
 
+pub mod image_import;
 pub mod import;
 pub mod pdf;
 pub mod raster;
@@ -17,6 +18,7 @@ pub mod website;
 use dp_geom::Rect;
 use dp_model::{Color, Document, PageId};
 
+pub use image_import::{ImportedImage, import_image_bytes, import_image_file};
 pub use import::{ImportResult, import_svg};
 pub use svg::export_svg;
 

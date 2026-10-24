@@ -10,7 +10,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::ModelError;
-use crate::document::{ComponentRegistry, Document, DocumentSettings};
+use crate::document::{AssetRegistry, ComponentRegistry, Document, DocumentSettings};
 use crate::geometry::{AutoLayout, Constraints, NodeGeometry, TextContent};
 use crate::ids::{NodeId, PageId};
 use crate::node::{ComponentRole, Node, PrototypeNode, Transform};
@@ -301,6 +301,13 @@ pub enum Edit {
         /// Settings after the edit.
         after: DocumentSettings,
     },
+    /// Replace the document-wide asset registry (inline images/fonts).
+    SetAssets {
+        /// Registry before the edit.
+        before: AssetRegistry,
+        /// Registry after the edit.
+        after: AssetRegistry,
+    },
 }
 
 impl Edit {
@@ -315,6 +322,7 @@ impl Edit {
             Edit::SetComponents { .. } => "component",
             Edit::SetVariables { .. } => "variables",
             Edit::SetSettings { .. } => "settings",
+            Edit::SetAssets { .. } => "assets",
         }
     }
 
@@ -377,6 +385,10 @@ impl Edit {
                 document.settings = after.clone();
                 Ok(())
             }
+            Edit::SetAssets { after, .. } => {
+                document.assets = after.clone();
+                Ok(())
+            }
         }
     }
 
@@ -437,6 +449,10 @@ impl Edit {
             }
             Edit::SetSettings { before, .. } => {
                 document.settings = before.clone();
+                Ok(())
+            }
+            Edit::SetAssets { before, .. } => {
+                document.assets = before.clone();
                 Ok(())
             }
         }

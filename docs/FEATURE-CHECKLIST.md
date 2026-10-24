@@ -170,3 +170,11 @@ Last updated: session 18 (AI assistant + plugin manager UIs verified in the stan
 | Q4 | Installers (Windows MSI/NSIS), upgrade path, reproducibility | planned | |
 | Q5 | Accessibility pass (keyboard, focus, labels) | planned | |
 | Q6 | Offline/no-network operation for core editor | planned | |
+
+## Session 19 update — image fills
+
+- E10/E11 (image import, image fills): implemented and verified end-to-end. Evidence: dp-io image_import tests,
+  dp-render image raster tests, dp-editor imaging tests (import/undo/save-reopen), native release verification.
+- Known limits: GIF animation not preserved, no asset dedupe, website export does not copy files, SVG import still
+  skips raster references.
+- Engine test total is now **337** (measured); backend 132 unit tests; frontend 153.

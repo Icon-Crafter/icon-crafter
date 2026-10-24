@@ -876,6 +876,42 @@ fn validate_registries(document: &Document, issues: &mut Vec<ValidationIssue>) {
                 format!("unexpected image MIME type {:?}", image.mime),
             );
         }
+        if image.width > 16384 || image.height > 16384 {
+            error(
+                issues,
+                "image-too-large",
+                format!("assets/images/{id}"),
+                format!(
+                    "image asset is {}x{} px; the limit is 16384 px per edge",
+                    image.width, image.height
+                ),
+            );
+        }
+        if let Some(data) = &image.data_base64 {
+            // Base64 inflates by 4/3; 24 MiB of base64 is ~18 MiB of image
+            // bytes, which keeps the document JSON within its size limit.
+            const MAX_INLINE_IMAGE_BASE64: usize = 24 * 1024 * 1024;
+            if data.len() > MAX_INLINE_IMAGE_BASE64 {
+                error(
+                    issues,
+                    "image-data-too-large",
+                    format!("assets/images/{id}"),
+                    format!(
+                        "inline image data is {} bytes of base64; the limit is {}",
+                        data.len(),
+                        MAX_INLINE_IMAGE_BASE64
+                    ),
+                );
+            }
+            if data.is_empty() || !data.is_ascii() {
+                error(
+                    issues,
+                    "image-data-invalid",
+                    format!("assets/images/{id}"),
+                    "inline image data must be non-empty ASCII base64".to_string(),
+                );
+            }
+        }
     }
     for (id, font) in &document.assets.fonts {
         if font.family.trim().is_empty() || font.style.trim().is_empty() {
