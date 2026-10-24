@@ -1,0 +1,94 @@
+# Auto-ship: the short path from a merged PR to a release.
+#
+# When code lands on main, this workflow decides whether main is shippable and,
+# if it is, raises the patch version and dispatches the ship workflow.
+#
+# Rules
+#   * Only direct pushes to main are considered - PR merges are marked
+#     "conventional commits" releases and go through version.yml instead, so a
+#     release always publishes reviewed code.
+#   * Path filter: documentation, CI and tooling changes never ship a binary.
+#   * The version commit produced by version.yml starts with "chore(release):"
+#     and is filtered out, so bumping never re-triggers shipping.
+#   * Releases are prefixed with the run number; the auto path always performs
+#     at least a patch bump.
+name: Auto ship
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: auto-ship
+  cancel-in-progress: false
+
+jobs:
+  ship:
+    name: Ship main if needed
+    if: >-
+      !startsWith(github.event.head_commit.message, 'chore(release):') &&
+      !startsWith(github.event.head_commit.message, 'docs:') &&
+      !startsWith(github.event.head_commit.message, 'ci:') &&
+      !startsWith(github.event.head_commit.message, 'chore:')
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Decide whether this commit ships a binary
+        id: decide
+        shell: pwsh
+        run: |
+          $files = git diff --name-only HEAD~1 HEAD 2>$null
+          $docsOnly = $files | Where-Object { $_ -match '^(docs/|\.github/|.*\.md$|authors\.)' }
+          $shippable = @($files | Where-Object { $_ -notmatch '^(docs/|\.github/|.*\.md$|authors\.)' })
+          if ($shippable.Count -eq 0) {
+            Write-Output "Only documentation/metadata changed - no release."
+            "ship=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            exit 0
+          }
+          Write-Output "Shippable changes:"
+          $shippable | ForEach-Object { Write-Output "  $_" }
+          "ship=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Install cargo-edit
+        if: steps.decide.outputs.ship == 'true'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command cargo-set-version -ErrorAction SilentlyContinue)) {
+            cargo install cargo-edit --locked
+          }
+
+      - name: Raise the patch version and dispatch ship
+        if: steps.decide.outputs.ship == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          # The next version: the highest existing vX.Y.Z tag + 1 patch.
+          $tags = git tag --list "v*" | ForEach-Object { $_ -replace '^v', '' } | Where-Object { $_ -match '^\d+\.\d+\.\d+$' }
+          if ($tags.Count -eq 0) {
+            $next = "0.1.1"
+          } else {
+            $sorted = $tags | Sort-Object { [version]$_ }
+            $latest = [version]($sorted[-1])
+            $next = "$($latest.Major).$($latest.Minor).$($latest.Build + 1)"
+          }
+          Write-Output "next=$next"
+          cargo install cargo-edit --locked 2>$null
+          cargo set-version --workspace $next
+          node -e "const fs=require('fs');for (const p of ['apps/ui/package.json','apps/desktop/tauri.conf.json']){const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version='$next';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(release): $next"
+          git tag -a "v$next" -m "Icon Crafter v$next"
+          git push --follow-tags
+          gh workflow run ship.yml --ref main -f "tag=v$next" -f "prerelease=false"

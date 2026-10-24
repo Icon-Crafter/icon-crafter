@@ -1,0 +1,72 @@
+# Keeps dependencies and workflow actions current.
+#
+# * Workspace crate bumps arrive as one grouped PR per ecosystem; CI (fmt,
+#   clippy -D warnings, tests, backend, UI) gates every PR, so a broken bump is
+#   visible before it lands.
+# * GitHub Actions bumps are grouped so action majors do not open a PR per job.
+# * Security advisory updates are separate so they can be merged immediately.
+version: 2
+updates:
+  # Rust workspace (Cargo.lock pins everything, including app crates).
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Stockholm
+    open-pull-requests-limit: 10
+    groups:
+      rust-dependencies:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "chore(deps)"
+    labels: ["dependencies", "rust"]
+    ignore:
+      # The desktop stack is upgraded deliberately together (tauri, wry, webview2).
+      - dependency-name: "tauri"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "wgpu"
+
+  # UI dependencies.
+  - package-ecosystem: npm
+    directory: "/apps/ui"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Stockholm
+    open-pull-requests-limit: 10
+    groups:
+      ui-dependencies:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      react-toolchain:
+        patterns: ["react*", "@types/react*", "vite", "@vitejs/*"]
+    commit-message:
+      prefix: "chore(ui-deps)"
+    labels: ["dependencies", "ui"]
+
+  # GitHub Actions used by the workflows in this directory.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Stockholm
+    open-pull-requests-limit: 5
+    groups:
+      workflow-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(ci-deps)"
+    labels: ["dependencies", "ci"]
+
+  # Container images used for local backend development.
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: monthly
+    labels: ["dependencies", "backend"]

@@ -1,0 +1,195 @@
+name: Ship (release artifacts)
+
+# Continuous delivery for a dated release.
+#
+# Triggered automatically by the "Release version" workflow (version.yml) with
+# the tag it just created, or manually for an existing tag:
+#
+#     gh workflow run ship.yml -f tag=v0.2.0 -f prerelease=false
+#
+# What it does
+#   1. Builds the production UI bundle (strict typecheck + vite build).
+#   2. Builds the desktop binary with `--features custom-protocol` (the plain
+#      release build still loads the Vite dev server, see docs/RELEASING.md).
+#   3. Packages NSIS + MSI installers with the Tauri CLI at the tag.
+#   4. Generates SHA256SUMS and a release notes file from CHANGELOG.md.
+#   5. Publishes a GitHub Release (draft-then-publish) with the installers.
+#
+# Secrets (optional)
+#   TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+#     -> enables signed auto-update artifacts when updater support is enabled.
+#   RELEASE_TOKEN
+#     -> a PAT used instead of GITHUB_TOKEN when the workflow must tag or
+#        trigger other workflows (GITHUB_TOKEN-created events do not start
+#        workflows unless the repository allows it).
+#   GH_RELEASE_TOKEN
+#     -> token used only to publish the GitHub Release (PAT if org policies
+#        restrict GITHUB_TOKEN releases).
+permissions:
+  contents: write
+
+concurrency:
+  group: ship-${{ github.ref }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.2.0). Empty means the tag that triggered this run."
+        required: false
+        default: ""
+      prerelease:
+        description: "Mark this release as a pre-release"
+        required: false
+        default: false
+        type: boolean
+  # Tag pushes can only ever produce a stable (non-prerelease) release: GitHub
+  # does not expose a comparable `inputs` context on `push`. Use the manual
+  # dispatch (or version.yml) for pre-releases.
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  # Keep the release binary small and deterministic (mirrors Cargo.toml).
+  CARGO_PROFILE_RELEASE_LTO: thin
+  CARGO_PROFILE_RELEASE_PANIC: abort
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+  CARGO_PROFILE_RELEASE_STRIP: "true"
+
+jobs:
+  ship:
+    name: Build and publish release
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Resolve tag
+        id: tag
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.tag }}"
+          if ([string]::IsNullOrWhiteSpace($tag)) { $tag = "${{ github.ref_name }}" }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+            throw "Refusing to ship '$tag': expected a semver tag such as v0.2.0"
+          }
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "version=$($tag.TrimStart('v'))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+          key: ship-${{ steps.tag.outputs.tag }}
+
+      - name: Install Tauri CLI
+        # Pinned to the major used by apps/desktop so bundling options match.
+        run: cargo install tauri-cli --version "^2.12" --locked
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.18.3 --activate
+
+      - name: Install UI dependencies
+        working-directory: apps/ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Build UI bundle
+        working-directory: apps/ui
+        run: pnpm build
+
+      - name: Build installers (NSIS + MSI)
+        working-directory: apps/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          tauri build --bundles "nsis,msi" --features custom-protocol --ci
+
+      - name: Collect artifacts and checksums
+        shell: pwsh
+        run: |
+          $version = "${{ steps.tag.outputs.version }}"
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          $installers = Get-ChildItem -Path "target/release/bundle" -Recurse -Include *.exe,*.msi |
+            Where-Object { $_.Name -like "*$version*" }
+          if ($installers.Count -eq 0) { throw "No installers produced for version $version" }
+          $portable = "target/release/iconcrafter-desktop.exe"
+          if (-not (Test-Path $portable)) { throw "desktop binary missing" }
+          Copy-Item $portable "release/iconcrafter-$version-windows-x64-portable.exe"
+          foreach ($installer in $installers) {
+            $target = "release/" + ($installer.Name -replace ' ', '-')
+            Copy-Item $installer.FullName $target
+          }
+          Get-ChildItem release | Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $([System.IO.Path]::GetFileName($_.Path))" } |
+            Set-Content -Path release/SHA256SUMS.txt -Encoding utf8
+          Get-Content release/SHA256SUMS.txt
+
+      - name: Write release notes
+        shell: pwsh
+        run: |
+          $version = "${{ steps.tag.outputs.version }}"
+          if (Test-Path CHANGELOG.md) {
+            $lines = Get-Content CHANGELOG.md -Raw
+            $match = [regex]::Match($lines, "(?ms)^## \[$version\].*?(?=^## \[|\z)")
+            if ($match.Success) { $match.Value | Set-Content -Path release/NOTES.md -Encoding utf8 }
+          }
+          if (-not (Test-Path release/NOTES.md)) {
+            "# Icon Crafter v$version`n`nSee CHANGELOG.md for details." | Set-Content -Path release/NOTES.md -Encoding utf8
+          }
+          @"
+
+          ## Artifacts
+          - ``iconcrafter-$version-windows-x64-portable.exe`` - portable desktop app (no install)
+          - ``Icon-Crafter_$($version)_x64-setup.exe`` - NSIS installer (per-user, silent: ``/S``)
+          - ``Icon-Crafter_$($version)_x64_en-US.msi`` - MSI installer
+          - ``SHA256SUMS.txt``
+
+          > The installers are **not code-signed**; Windows SmartScreen warns on first run.
+          > Verify the checksums above before installing.
+          "@ | Add-Content -Path release/NOTES.md -Encoding utf8
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: iconcrafter-${{ steps.tag.outputs.version }}-windows
+          path: release/*
+          retention-days: 30
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          PRERELEASE_INPUT: ${{ inputs.prerelease }}
+        run: |
+          $tag = "${{ steps.tag.outputs.tag }}"
+          # `inputs.*` is empty on tag pushes, hence `env:` rather than
+          # `${{ inputs.prerelease }}` (GitHub forbids inputs in env).
+          $pre = "$env:PRERELEASE_INPUT"
+          $flags = @("--title", "Icon Crafter $tag", "--notes-file", "release/NOTES.md")
+          if ($tag -match '-') { $flags += "--prerelease" } elseif ($pre -eq "true") { $flags += "--prerelease" }
+          if (gh release view $tag 2>$null) {
+            gh release upload $tag release/* --clobber
+            gh release edit $tag @flags
+          } else {
+            gh release create $tag release/* @flags
+          }
+          gh release view $tag

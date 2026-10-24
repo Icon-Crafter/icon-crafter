@@ -1,0 +1,37 @@
+version: 2
+
+before:
+  hooks:
+    - cargo fmt --all -- --check
+
+builds:
+  # The desktop crate is a Tauri application; installers are produced by
+  # .github/workflows/ship.yml. GoReleaser only builds the engine-facing
+  # binaries that ship on Linux/macOS as well.
+  - id: iconcrafter-server
+    main: ./apps/backend/src/main.rs
+    binary: iconcrafter-server
+    env:
+      - CGO_ENABLED=0
+    goos: []
+    skip: true
+  - id: dp-bench
+    main: ./crates/dp-editor/examples
+    skip: true
+
+archives:
+  - formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: SHA256SUMS
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore\\(release\\):"

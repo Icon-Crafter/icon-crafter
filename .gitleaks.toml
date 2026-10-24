@@ -1,0 +1,13 @@
+# Secret scanning configuration for gitleaks (see .github/workflows/security.yml).
+title = "Icon Crafter"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known false positives in this repository"
+
+[[rules]]
+id = "iconcrafter-allow-test-fixtures"
+description = "Test fixtures and generated sample documents may contain fake credentials"
+path = '''(?i)(crates/.*/tests?/|fixtures/|docs/assets/)'''

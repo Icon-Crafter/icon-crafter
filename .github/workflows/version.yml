@@ -1,0 +1,130 @@
+name: Release version
+
+# Version controller: the *only* way the project version is raised.
+#
+# * `cargo set-version` (cargo-edit) keeps every workspace member in lockstep
+#   through `version.workspace = true` plus the package.json and tauri.conf.json
+#   copies of the desktop app.
+# * Cargo.lock / pnpm-lock.yaml and the CHANGELOG "Unreleased" section are
+#   refreshed in the same commit so the auto-ship workflow can tag exactly what
+#   CI tested.
+# * The commit uses `chore(release): x.y.z` and is skipped by the auto-ship
+#   workflow's path filter, so a version bump never re-triggers packaging.
+permissions:
+  contents: write
+
+concurrency:
+  group: version-${{ github.ref }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "New workspace version (semver, e.g. 0.2.0 or 1.0.0-rc.1)"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark as a pre-release (tag v<x.y.z-pre>, GitHub pre-release)"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  bump:
+    name: Bump workspace version
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Validate version
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+            throw "Invalid semver version '$version'"
+          }
+          $current = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches.Groups[1].Value
+          Write-Output "current=$current next=$version"
+          "NEXT_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Install cargo-edit
+        shell: pwsh
+        run: |
+          if (-not (Get-Command cargo-set-version -ErrorAction SilentlyContinue)) {
+            cargo install cargo-edit --locked
+          }
+
+      - name: Bump Rust workspace
+        run: cargo set-version --workspace ${{ inputs.version }}
+
+      - name: Sync package.json versions
+        shell: pwsh
+        run: |
+          node -e "const fs=require('fs');const p='apps/ui/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version='${{ inputs.version }}';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');"
+
+      - name: Sync tauri.conf.json version
+        shell: pwsh
+        run: |
+          node -e "const fs=require('fs');const p='apps/desktop/tauri.conf.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version='${{ inputs.version }}';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');"
+
+      - name: Refresh Cargo.lock
+        run: cargo check -p dp-model --locked=false
+
+      - name: Refresh pnpm lockfile
+        working-directory: apps/ui
+        shell: pwsh
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.18.3 --activate
+          pnpm install --lockfile-only --ignore-scripts
+
+      - name: Promote changelog section
+        shell: pwsh
+        run: |
+          $version = "$env:NEXT_VERSION"
+          $repo = "${{ github.repository }}"
+          $path = "CHANGELOG.md"
+          $text = Get-Content $path -Raw
+          $today = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
+          if ($text -notmatch '## \[Unreleased\]') { throw "CHANGELOG.md has no ## [Unreleased] section" }
+          # Close the current Unreleased section under the new version heading and
+          # open a fresh empty one above it.
+          $heading = "## [$version] - $today"
+          $updated = [regex]::Replace($text, '## \[Unreleased\]', "## [Unreleased]`r`n`r`n$heading", 1)
+          $previous = (git describe --tags --abbrev=0 2>$null)
+          if (-not $previous) { $previous = "HEAD~1" }
+          $updated = [regex]::Replace(
+            $updated,
+            '(?m)^\[Unreleased\]: .*$',
+            "[Unreleased]: https://github.com/$repo/compare/v$version...HEAD`r`n[$version]: https://github.com/$repo/compare/$previous...v$version"
+          )
+          Set-Content -Path $path -Value $updated -Encoding utf8
+
+      - name: Create release commit and tag
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(release): $env:NEXT_VERSION"
+          git tag -a "v$env:NEXT_VERSION" -m "Icon Crafter v$env:NEXT_VERSION"
+          git push origin HEAD:${{ github.ref_name }}
+          git push origin "v$env:NEXT_VERSION"
+
+      - name: Dispatch the ship workflow
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run ship.yml `
+            --ref "${{ github.ref_name }}" `
+            -f "tag=v$env:NEXT_VERSION" `
+            -f "prerelease=${{ inputs.prerelease }}"

@@ -1,5 +1,11 @@
 # Icon Crafter
 
+[![CI](https://github.com/Icon-Crafter/icon-crafter/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Icon-Crafter/icon-crafter/actions/workflows/ci.yml)
+[![Security](https://github.com/Icon-Crafter/icon-crafter/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/Icon-Crafter/icon-crafter/actions/workflows/security.yml)
+[![Release](https://github.com/Icon-Crafter/icon-crafter/actions/workflows/ship.yml/badge.svg)](https://github.com/Icon-Crafter/icon-crafter/actions/workflows/ship.yml)
+[![Latest release](https://img.shields.io/github/v/release/Icon-Crafter/icon-crafter?label=release)](https://github.com/Icon-Crafter/icon-crafter/releases/latest)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
+
 Icon Crafter is an original, professional design platform: a Rust-native design
 document engine with GPU/CPU rendering, a Tauri 2 desktop editor, a collaborative
 multiplayer backend, and companion workspaces for whiteboarding, slides,
@@ -22,6 +28,8 @@ Start with:
 - [`docs/DOCUMENT-FORMAT.md`](docs/DOCUMENT-FORMAT.md) — the native document schema
 - [`docs/COLLAB-PROTOCOL.md`](docs/COLLAB-PROTOCOL.md) — realtime synchronisation
 - [`docs/TESTING.md`](docs/TESTING.md) — how to build, test and verify
+- [`docs/RELEASING.md`](docs/RELEASING.md) — CI, versioning and installer automation
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — workflow, commit conventions and checks
 - [`docs/DEVELOPMENT-LOG.md`](docs/DEVELOPMENT-LOG.md) — chronological engineering log
 
 ## Requirements

@@ -1,0 +1,19 @@
+{
+  "name": "iconcrafter",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Icon Crafter - Figma-class design platform (repository tooling: commit hooks, release helpers). The editor UI has its own package.json in apps/ui.",
+  "scripts": {
+    "typecheck": "pnpm --dir apps/ui typecheck",
+    "test": "pnpm --dir apps/ui test",
+    "build": "pnpm --dir apps/ui build",
+    "dev": "pnpm --dir apps/ui dev",
+    "tauri": "pnpm --dir apps/ui tauri",
+    "prepare": "husky || true"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "husky": "^9.1.7",
+    "yaml": "^2.9.1"
+  }
+}

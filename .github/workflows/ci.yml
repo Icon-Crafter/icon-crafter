@@ -1,0 +1,205 @@
+# Continuous integration.
+#
+# Required checks for pull requests (see docs/RELEASING.md):
+#   * rust (workspace fmt / clippy / tests / doc tests)
+#   * backend (server crate + feature builds + unit tests)
+#   * ui (strict typecheck, vitest, production bundle)
+#   * package (desktop release + NSIS installer, Windows)
+#
+# Security and hygiene jobs (secrets, dependency audit, cargo-deny) are in
+# security.yml; installers are produced by release.yml only.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  # ---------------------------------------------------------------- workspace
+  rust:
+    name: Engine workspace (fmt, clippy, tests)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Cache the workspace builds, not per-crate. Tests are serial enough
+          # that a shared cache keeps this job well under the timeout.
+          workspaces: ". -> target"
+
+      - name: Formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (engine crates, deny warnings)
+        run: >
+          cargo clippy
+          -p dp-model -p dp-geom -p dp-layout -p dp-text -p dp-render
+          -p dp-io -p dp-persist -p dp-editor -p dp-collab -p dp-prototype
+          -p dp-devmode -p dp-ai -p dp-plugins
+          --no-default-features --all-targets -- -D warnings
+
+      - name: Unit and integration tests (engine crates)
+        run: >
+          cargo test
+          -p dp-model -p dp-geom -p dp-layout -p dp-text -p dp-render
+          -p dp-io -p dp-persist -p dp-editor -p dp-collab -p dp-prototype
+          -p dp-devmode -p dp-ai -p dp-plugins
+          --no-default-features
+
+  # ------------------------------------------------------------------ backend
+  backend:
+    name: Backend (Axum server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      - name: Formatting
+        run: cargo fmt -p iconcrafter-server -- --check
+
+      - name: Clippy (server)
+        run: cargo clippy -p iconcrafter-server --no-deps --all-targets -- -D warnings
+
+      - name: Unit tests (no database required)
+        run: cargo test -p iconcrafter-server --lib
+
+      - name: Optional feature builds (s3, otel)
+        # These features are compile-only in CI: they pull large dependency
+        # trees and the S3/OTLP paths need external services that are not
+        # available on hosted runners.
+        run: |
+          cargo check -p iconcrafter-server --features s3
+          cargo check -p iconcrafter-server --features otel
+
+  # ----------------------------------------------------------------------- ui
+  ui:
+    name: UI (typecheck, tests, bundle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.18.3 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Production bundle
+        run: pnpm build
+
+      - name: Upload UI bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: apps/ui/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  # ---------------------------------------------------- desktop package smoke
+  package:
+    name: Desktop package smoke (Windows)
+    needs: ui
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.18.3 --activate
+
+      - name: Install UI dependencies
+        working-directory: apps/ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Build UI bundle
+        working-directory: apps/ui
+        run: pnpm build
+
+      - name: Build desktop (production custom-protocol build)
+        # The desktop crate only embeds the UI when built with the
+        # `custom-protocol` feature; a plain release build still points at the
+        # dev server. See docs/RELEASING.md.
+        run: cargo build -p iconcrafter-desktop --release --features custom-protocol
+
+      - name: Verify the binary starts (WebView2 smoke test)
+        shell: pwsh
+        run: |
+          $exe = "target/release/iconcrafter-desktop.exe"
+          if (-not (Test-Path $exe)) { throw "desktop binary was not produced" }
+          $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9223"
+          $process = Start-Process -FilePath $exe -PassThru
+          $window = [IntPtr]::Zero
+          for ($i = 0; $i -lt 40; $i++) {
+            Start-Sleep -Milliseconds 750
+            $process.Refresh()
+            if ($process.HasExited) { throw "desktop application exited during startup (code $($process.ExitCode))" }
+            if ($process.MainWindowHandle -ne [IntPtr]::Zero) { $window = $process.MainWindowHandle; break }
+          }
+          if ($window -eq [IntPtr]::Zero) { Stop-Process -Id $process.Id -Force; throw "desktop application did not open a window" }
+          Write-Output "desktop window opened: $($process.MainWindowTitle)"
+          Stop-Process -Id $process.Id -Force
