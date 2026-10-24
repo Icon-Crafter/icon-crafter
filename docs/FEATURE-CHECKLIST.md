@@ -1,4 +1,4 @@
-﻿# Feature checklist
+# Feature checklist
 
 Status legend: **planned** · **in-progress** · **implemented** (code exists, builds, unit
 tested) · **verified** (verified end-to-end in the running app) · **blocked** (with reason)
@@ -7,7 +7,7 @@ tested) · **verified** (verified end-to-end in the running app) · **blocked** 
 Rule: a feature is never marked implemented/verified because a button exists. Each row
 names the verification evidence in the development log or a test.
 
-Last updated: session 20 (image import with embedded assets; Windows NSIS/MSI installers built and silent install/launch/uninstall verified; 337 engine tests + 153 frontend tests green).
+Last updated: session 21 (desktop performance fixes — clip-mask cache, scaled rendering, rAF coalescing, release numbers in docs/PERFORMANCE.md; canvas viewport sync fixing selection-outline misalignment; Figma-style layer drag reparenting; 43 dp-editor tests + 153 frontend tests green).
 
 ## Foundation
 
@@ -47,7 +47,7 @@ Last updated: session 20 (image import with embedded assets; Windows NSIS/MSI in
 | E7 | Move, resize with handles, rotate, nudge, snap to objects/grid/guides | implemented | move/nudge/snap tested; handle drag math in `input.rs`; guides UI pending |
 | E8 | Copy/paste/duplicate/cut/clipboard | implemented | `duplicate_nodes` + clipboard commands; editor tests |
 | E9 | Group/ungroup, reorder, z-order commands, lock/hide | implemented | ops layer + command table; editor tests |
-| E10 | Layers panel with tree, rename, drag reorder, search | in-progress | engine summary + rename/visibility/lock commands; UI panel milestone 2 |
+| E10 | Layers panel with tree, rename, drag reorder, search | implemented | engine summary + rename/visibility/lock commands; drag-to-reparent/reorder verified natively in session 21 (docs/assets/layer-dnd-native.png, undo restores parent) |
 | E11 | Pages management | implemented | `add_page`/`rename_page`/`delete_page`/`set_active_page` + editor test |
 | E12 | Property inspector: transform, size, rotation, opacity, blend, fills, strokes, effects, corner radii | in-progress | engine `apply_patch`/opacity/text props implemented; UI inspector milestone 2; inspector effects fields pending |
 | E13 | Undo/redo with coalescing | verified | `History` coalescing + editor tests (drag undo, delete undo, text commit undo) |

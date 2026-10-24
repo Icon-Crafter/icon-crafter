@@ -1,4 +1,4 @@
-﻿# Development log
+# Development log
 
 Chronological record of work, decisions and verification. Add an entry for every
 meaningful step; keep claims tied to commands or manual checks.
@@ -515,3 +515,35 @@ Goal: make the desktop app an installable product, not just a cargo binary.
 - MSI silent verification (non-elevated, per-user): msiexec /i ... /qn ALLUSERS=2 MSIINSTALLPERUSER=1 exit 0;
   installed exe (20,354,048 bytes) launched with title "Icon Crafter" and CDP answered on 9228; uninstall exit 0,
   files and registry entry removed. Plain /qn returns 1603 (per-machine MSI needs elevation).
+
+## Session 21 (2026-10-24) — desktop lag fixes, viewport/selection sync, layer drag & drop
+
+User report: "Fix the performance on the desktop app. Its lagging a ton", then "sorry i mean the speed of
+the software its self", plus screenshots showing the selection outline offset from the frame and a request for
+Figma-style layer dragging.
+
+Profiled the real standalone release binary through WebView2 CDP: render cost scaled with pixels, not node
+count (1200×800 dpr1 ≈ 77 ms; dpr2 ≈ 337 ms; 200×150 ≈ 4 ms). Root causes:
+
+- every item with a clip allocated a full-window `Mask` (frames clip their children; 300 imported vectors
+  ⇒ 300 masks per frame);
+- the IPC path hand-demultiplied every pixel;
+- no interactive quality scaling, and the UI committed every engine snapshot and repainted at full resolution;
+- the engine kept its default 1200×800 viewport after the right sidebar opened while the canvas CSS box was
+  912×828. The frame canvas was stretched non-uniformly (bitmap aspect ≠ CSS aspect) while the overlay canvas
+  drew in CSS space — that is exactly why the selection box looked wrong.
+
+Fixes: clip-mask cache + full-target skip; `RenderTarget::render_scaled` with a 0.4 quality while interacting;
+`take_demultiplied()` IPC conversion; snapshot/pointer rAF coalescing; a viewport resync effect that re-sends
+`set_viewport` after document open or size/dpr drift, plus a no-paint guard while the viewport is mismatched.
+Result: full render 46.6 ms, draft 6.4–8.8 ms (dpr2: 137/39 ms), ≈85 painted fps during a synthetic drag
+(was ≈13). Numbers and caveats are in docs/PERFORMANCE.md.
+
+Layer drag & drop: rows can be dragged onto container rows to become children, or between siblings
+(before/after) to reorder, with Figma-style drop indicators. The UI sends the existing `reorder` command with
+`new_parent_id`; the Rust command now accepts both `parent`/`parent_id` (move_to_parent) and
+`parent`/`new_parent_id` (reorder) spellings.
+
+Verification: dp-editor 43 tests green; `pnpm typecheck` clean; `pnpm test` 153/153; `pnpm build` clean;
+release rebuilt with `--features custom-protocol`; native CDP checks for viewport alignment and drag
+reparenting recorded in docs/TESTING.md.

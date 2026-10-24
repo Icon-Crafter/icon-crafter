@@ -118,6 +118,15 @@ impl Viewport {
         (w, h)
     }
 
+    /// Device resolution multiplied by a raster scale (clamped like
+    /// [`Viewport::device_size`]). Used for draft frames while interacting.
+    pub fn device_size_scaled(&self, scale: f64) -> (u32, u32) {
+        let scale = scale.clamp(0.1, 2.0);
+        let w = (self.width * self.dpr * scale).round().clamp(1.0, 16384.0) as u32;
+        let h = (self.height * self.dpr * scale).round().clamp(1.0, 16384.0) as u32;
+        (w, h)
+    }
+
     /// Pans by a CSS-pixel delta.
     pub fn pan_css(&mut self, dx: f64, dy: f64) {
         self.x -= dx / self.zoom;

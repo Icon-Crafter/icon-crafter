@@ -32,6 +32,20 @@ import { requestNewDocument, requestOpenDocument, runCommand } from "../engine/c
 import { IconButton } from "./primitives/IconButton";
 
 const FRAME_QUALITY = 1;
+// 0.4 ≈ 6 ms frames at 1200×800; the browser upscales while dragging.
+const DRAFT_FRAME_QUALITY = 0.4;
+
+/** Bitmap size for a frame at `quality` (mirrors Rust `device_size_scaled`). */
+function frameTargetSize(viewport: { width: number; height: number; dpr: number }, quality: number): {
+  width: number;
+  height: number;
+} {
+  const dpr = viewport.dpr || window.devicePixelRatio || 1;
+  return {
+    width: Math.max(1, Math.round(Math.round(viewport.width * dpr) * quality)),
+    height: Math.max(1, Math.round(Math.round(viewport.height * dpr) * quality)),
+  };
+}
 
 interface CanvasSize {
   width: number;
@@ -294,9 +308,12 @@ export function CanvasStage() {
   const [cursor, setCursor] = useState("default");
   const [textDraft, setTextDraft] = useState("");
   const panning = useRef(false);
+  const interactingRef = useRef(false);
+  const interactionTimer = useRef<number | null>(null);
+  const [interacting, setInteracting] = useState(false);
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
   const inFlightFrame = useRef(false);
-  const lastPainted = useRef<{ frameId: number; revision: number; width: number; height: number } | null>(null);
+  const lastPainted = useRef<{ frameId: number; revision: number; width: number; height: number; quality: number } | null>(null);
   const textNodeRef = useRef<string | null>(null);
   const fpsRef = useRef<{ frames: number; start: number }>({ frames: 0, start: performance.now() });
 
@@ -325,21 +342,47 @@ export function CanvasStage() {
   useEffect(() => {
     const activePump = pump ?? appStore.getState().pump;
     if (!activePump || size.width < 2 || size.height < 2) return;
+    if (engine.doc === null) return;
     const dpr = window.devicePixelRatio || 1;
-    void activePump.command("set_viewport", { width: size.width, height: size.height, dpr }).catch(() => {
-      /* engine reports through errors */
-    });
-  }, [pump, size.width, size.height]);
+    const viewport = engine.viewport;
+    const matches =
+      Math.abs(viewport.width - size.width) < 1 &&
+      Math.abs(viewport.height - size.height) < 1 &&
+      Math.abs(viewport.dpr - dpr) < 0.01;
+    if (matches) return;
+    // The engine's default viewport (1200×800) and a document reset can leave
+    // the render size and the CSS canvas size out of sync; that stretches the
+    // frame canvas non-uniformly and makes the overlay (drawn in CSS space)
+    // disagree with the rendered pixels. Re-send the measured size whenever it
+    // drifts, including right after a document is opened.
+    void activePump
+      .command("set_viewport", { width: size.width, height: size.height, dpr })
+      .catch(() => {
+        /* engine reports through errors */
+      });
+  }, [pump, size.width, size.height, engine.viewport, engine.doc, engine]);
 
   /* ---------------- frame painting ---------------- */
 
   const paintFrame = useCallback(
     async (activePump: EnginePump, state: EngineState) => {
+      const quality = interactingRef.current ? DRAFT_FRAME_QUALITY : FRAME_QUALITY;
+      // Never paint while the engine viewport disagrees with the measured CSS
+      // size: the canvas would be stretched and the overlay misaligned.
+      if (
+        size.width >= 2 &&
+        size.height >= 2 &&
+        (Math.abs(state.viewport.width - size.width) > 1 ||
+          Math.abs(state.viewport.height - size.height) > 1)
+      ) {
+        return;
+      }
       const key = {
         frameId: state.frame_id,
         revision: state.revision,
         width: state.viewport.width,
         height: state.viewport.height,
+        quality,
       };
       const last = lastPainted.current;
       if (
@@ -347,7 +390,8 @@ export function CanvasStage() {
         last.frameId === key.frameId &&
         last.revision === key.revision &&
         last.width === key.width &&
-        last.height === key.height
+        last.height === key.height &&
+        last.quality === key.quality
       ) {
         return;
       }
@@ -355,11 +399,9 @@ export function CanvasStage() {
       inFlightFrame.current = true;
       const started = performance.now();
       try {
-        const buffer = await activePump.renderFrame(FRAME_QUALITY);
+        const buffer = await activePump.renderFrame(quality);
         const viewport = state.viewport;
-        const dpr = viewport.dpr || window.devicePixelRatio || 1;
-        const width = Math.max(1, Math.round(viewport.width * dpr));
-        const height = Math.max(1, Math.round(viewport.height * dpr));
+        const { width, height } = frameTargetSize(viewport, quality);
         if (buffer.byteLength < width * height * 4) {
           return;
         }
@@ -390,7 +432,7 @@ export function CanvasStage() {
         inFlightFrame.current = false;
       }
     },
-    [setFrameStats],
+    [setFrameStats, size.width, size.height],
   );
 
   useEffect(() => {
@@ -399,7 +441,7 @@ export function CanvasStage() {
     if (engine.doc === null) return;
     if (size.width < 2 || size.height < 2) return;
     void paintFrame(activePump, engine);
-  }, [pump, status, engine, engine.frame_id, engine.revision, engine.viewport.width, engine.viewport.height, size.width, size.height, paintFrame]);
+  }, [pump, status, engine, engine.frame_id, engine.revision, engine.viewport.width, engine.viewport.height, size.width, size.height, interacting, paintFrame]);
 
   /* ---------------- overlay + rulers ---------------- */
 
@@ -441,8 +483,27 @@ export function CanvasStage() {
     [pump],
   );
 
+  const beginInteraction = () => {
+    if (!interactingRef.current) {
+      interactingRef.current = true;
+      setInteracting(true);
+    }
+  };
+
+  const endInteraction = () => {
+    if (interactionTimer.current !== null) {
+      window.clearTimeout(interactionTimer.current);
+      interactionTimer.current = null;
+    }
+    if (interactingRef.current) {
+      interactingRef.current = false;
+      setInteracting(false);
+    }
+  };
+
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button === 0) surfaceRef.current?.focus();
+    beginInteraction();
     lastPointer.current = { x: event.clientX, y: event.clientY };
     if (event.button === 1) {
       panning.current = true;
@@ -493,16 +554,26 @@ export function CanvasStage() {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     panning.current = false;
+    endInteraction();
     sendPointer("up", event);
   };
 
   const onPointerLeave = (event: React.PointerEvent<HTMLDivElement>) => {
+    endInteraction();
     sendPointer("leave", event);
     setCursor("default");
   };
 
   const onWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
+    beginInteraction();
+    if (interactionTimer.current !== null) {
+      window.clearTimeout(interactionTimer.current);
+    }
+    interactionTimer.current = window.setTimeout(() => {
+      interactionTimer.current = null;
+      endInteraction();
+    }, 180);
     const activePump = pump ?? appStore.getState().pump;
     const surface = surfaceRef.current;
     if (!activePump || !surface) return;

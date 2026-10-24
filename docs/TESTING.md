@@ -1,4 +1,4 @@
-﻿# Testing & benchmarks
+# Testing & benchmarks
 
 ## Layers
 
@@ -401,3 +401,28 @@ download.
 Use per-user properties when the agent/session is not elevated:
 msiexec /i "<msi>" /qn ALLUSERS=2 MSIINSTALLPERUSER=1 (exit 0). Plain /qn on this per-machine package returns
 1603 because silent installs cannot request elevation. Uninstall with msiexec /x <product-code> /qn.
+
+## Session 21 verification — desktop performance + viewport sync + layer drag & drop
+
+Commands:
+
+```powershell
+cargo test -p dp-editor --no-default-features
+pnpm --dir apps/ui typecheck
+pnpm --dir apps/ui test
+pnpm --dir apps/ui build
+cargo build -p iconcrafter-desktop --release --features custom-protocol
+```
+
+Manual/native checks (standalone release, WebView2 CDP; full numbers in docs/PERFORMANCE.md):
+
+1. Launch `target/release/iconcrafter-desktop.exe` with
+   `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9242`; confirm the page URL is
+   `http://tauri.localhost/` (embedded bundle, not the Vite dev server).
+2. Compare engine viewport with the canvas CSS box: `engine_state.viewport.width/height` must equal the
+   canvas `clientWidth/clientHeight` (e.g. 912×828 in a 1440×900 window with both sidebars open). Selecting a
+   frame must draw the selection outline exactly on the rendered pixels (no offset/stretch).
+3. `render_frame` timings: full ≈47 ms at 1200×800 dpr1, draft (quality 0.4) ≈7 ms; dpr2 ≈137/39 ms.
+4. Drag a layer row onto a frame row: it becomes a child (drop indicator = tinted outline); drag between
+   siblings: accent line appears and order changes. Verify with `engine_state.summary.nodes[].parent` after
+   the drop, and with undo restoring the previous parent/order.

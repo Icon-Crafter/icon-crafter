@@ -5,6 +5,7 @@
 //! and accumulated rectangular clips. The same display list will feed a future
 //! wgpu backend; the CPU path stays the reference for visual tests and export.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use dp_geom::{FillRule as GeomFillRule, Mat2D, Point, Rect, VectorPath};
@@ -49,7 +50,21 @@ impl RenderTarget {
         viewport: &Viewport,
         text: &mut TextEngine,
     ) -> Result<RenderTarget, RenderError> {
-        let (width, height) = viewport.device_size();
+        Self::render_scaled(list, viewport, text, 1.0)
+    }
+
+    /// Renders at `scale` of the viewport's device resolution.
+    ///
+    /// `scale < 1.0` renders fewer pixels for draft frames while the user is
+    /// dragging or zooming; the UI upscales the buffer for display.
+    pub fn render_scaled(
+        list: &DisplayList,
+        viewport: &Viewport,
+        text: &mut TextEngine,
+        scale: f64,
+    ) -> Result<RenderTarget, RenderError> {
+        let scale = scale.clamp(0.1, 2.0);
+        let (width, height) = viewport.device_size_scaled(scale);
         if width == 0 || height == 0 || width > MAX_TARGET_EDGE || height > MAX_TARGET_EDGE {
             return Err(RenderError::InvalidSize(width, height));
         }
@@ -60,11 +75,20 @@ impl RenderTarget {
             pixmap.fill(to_tiny_color(list.background, 1.0));
         }
 
-        let viewport_transform = to_tiny_transform(viewport.transform());
+        // Device-space transform: world -> device pixels, optionally scaled down
+        // for draft frames (`scale` multiplies the viewport's dpr scale).
+        let scaled_matrix = Mat2D::scale(scale, scale).mul(viewport.transform());
+        let viewport_transform = to_tiny_transform(scaled_matrix);
         let device_rect = Rect::new(0.0, 0.0, width as f64, height as f64);
 
+        // Clip masks are expensive to build (a full-target coverage mask), so
+        // share one mask per distinct clip rectangle within this frame. Before
+        // this cache every clipped item rebuilt a full-size mask: with hundreds
+        // of children that alone dominated the frame time.
+        let mut masks: HashMap<(u32, u32, u32, u32), Mask> = HashMap::new();
+
         for item in &list.items {
-            let screen_bounds = viewport.transform().apply_rect(item.world_bounds);
+            let screen_bounds = scaled_matrix.apply_rect(item.world_bounds);
             if !intersects(screen_bounds, device_rect) {
                 continue;
             }
@@ -72,22 +96,26 @@ impl RenderTarget {
             // A zero-area clip means the item is fully clipped away.
             let clip_mask = match item.clip {
                 Some(clip) => {
-                    let screen = viewport.transform().apply_rect(clip);
+                    let screen = scaled_matrix.apply_rect(clip);
                     if screen.w <= 0.0 || screen.h <= 0.0 {
                         continue;
                     }
-                    clip_mask(&screen, width, height)
+                    if covers_target(&screen, width, height) {
+                        None
+                    } else {
+                        let key = mask_key(&screen);
+                        if !masks.contains_key(&key)
+                            && let Some(mask) = clip_mask(&screen, width, height)
+                        {
+                            masks.insert(key, mask);
+                        }
+                        masks.get(&key)
+                    }
                 }
                 None => None,
             };
 
-            draw_item(
-                &mut pixmap,
-                item,
-                viewport_transform,
-                clip_mask.as_ref(),
-                text,
-            );
+            draw_item(&mut pixmap, item, viewport_transform, clip_mask, text);
         }
 
         Ok(RenderTarget {
@@ -132,6 +160,15 @@ impl RenderTarget {
             ]);
         }
         out
+    }
+
+    /// Consumes the target and returns straight-alpha RGBA8 pixels.
+    ///
+    /// tiny-skia's demultiplication is the fast path for the IPC frame
+    /// contract; keep [`RenderTarget::data_straight_rgba8`] for callers that
+    /// need to retain the target (e.g. for PNG encoding afterwards).
+    pub fn into_straight_rgba8(self) -> Vec<u8> {
+        self.pixmap.take_demultiplied()
     }
 
     /// Encodes the frame as PNG bytes.
@@ -514,6 +551,25 @@ fn to_tiny_stroke(stroke: &SceneStroke) -> TinyStroke {
     }
 }
 
+/// Whether a screen-space clip rectangle covers the whole render target, in
+/// which case no mask is needed at all.
+fn covers_target(screen: &Rect, width: u32, height: u32) -> bool {
+    screen.x <= 0.5
+        && screen.y <= 0.5
+        && screen.right() >= width as f64 - 0.5
+        && screen.bottom() >= height as f64 - 0.5
+}
+
+/// Cache key for a screen-space clip rectangle (rounded outward to pixels).
+fn mask_key(screen: &Rect) -> (u32, u32, u32, u32) {
+    let x = screen.x.floor().max(0.0) as u32;
+    let y = screen.y.floor().max(0.0) as u32;
+    let right = screen.right().ceil().max(0.0) as u32;
+    let bottom = screen.bottom().ceil().max(0.0) as u32;
+    (x, y, right.saturating_sub(x), bottom.saturating_sub(y))
+}
+
+/// Builds a coverage mask for a screen-space rectangle.
 fn clip_mask(screen: &Rect, width: u32, height: u32) -> Option<Mask> {
     let rect = tiny_skia::Rect::from_xywh(
         screen.x as f32,

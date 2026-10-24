@@ -241,6 +241,7 @@ impl EditorState {
                 let ids = resolve_ids(self, args)?;
                 let parent: Option<NodeId> = args
                     .get("parent")
+                    .or_else(|| args.get("parent_id"))
                     .cloned()
                     .map(serde_json::from_value)
                     .transpose()
@@ -264,6 +265,7 @@ impl EditorState {
                     })?;
                 let parent: Option<NodeId> = args
                     .get("parent")
+                    .or_else(|| args.get("new_parent_id"))
                     .cloned()
                     .map(serde_json::from_value)
                     .transpose()

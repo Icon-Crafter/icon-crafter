@@ -848,6 +848,29 @@ kbd {
   opacity: 0.45;
 }
 
+/* Drag & drop reparenting (layers panel). */
+.layer-row--dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.layer-row--dragging .layer-name {
+  color: var(--text-primary);
+}
+
+.layer-row--drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.layer-row--drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.layer-row--drop-inside {
+  background: var(--selection-soft);
+  box-shadow: inset 0 0 0 1px var(--selection);
+}
+
 .layer-indent {
   flex: 0 0 auto;
   width: 5px;

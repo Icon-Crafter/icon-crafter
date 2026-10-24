@@ -993,6 +993,14 @@ impl EditorState {
 
     /// Renders the current viewport into a frame.
     pub fn render(&mut self) -> Result<RenderFrame, EditorError> {
+        self.render_scaled(1.0)
+    }
+
+    /// Renders the viewport at `scale` of the device resolution.
+    ///
+    /// The UI requests draft frames (`0.5`) while the pointer is down so a full
+    /// 1200×800@2x window does not rasterize 3.8M pixels per mouse move.
+    pub fn render_scaled(&mut self, scale: f64) -> Result<RenderFrame, EditorError> {
         let page_id = self.document.active_page_id();
         // Layout is invalidated by document edits (`apply`, input mutations),
         // not per frame: recomputing it here made every render O(nodes).
@@ -1030,7 +1038,7 @@ impl EditorState {
             {
                 item.text = None;
             }
-            RenderTarget::render(&list, &self.viewport, &mut self.text_engine)
+            RenderTarget::render_scaled(&list, &self.viewport, &mut self.text_engine, scale)
                 .map_err(|error| EditorError::Render(error.to_string()))?
         };
         self.frame_id += 1;
@@ -1045,11 +1053,13 @@ impl EditorState {
             overlay.text_edit = None;
             overlay.tool_hint = String::new();
         }
+        let width = target.width();
+        let height = target.height();
         Ok(RenderFrame {
             frame_id: self.frame_id,
-            width: target.width(),
-            height: target.height(),
-            rgba: target.data_straight_rgba8(),
+            width,
+            height,
+            rgba: target.into_straight_rgba8(),
             overlay,
         })
     }

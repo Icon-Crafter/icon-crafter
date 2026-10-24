@@ -49,6 +49,49 @@ Two real fixes came out of these measurements:
   faster (LTO), but we only quote measured numbers, so no release claims are
   made here until the release benchmark is run.
 
+## Release-build interaction benchmark (2026-10-24, session 21)
+
+Protocol: installed standalone release binary (`cargo build -p iconcrafter-desktop
+--release --features custom-protocol`), embedded UI at `http://tauri.localhost/`,
+WebView2 (Chromium 155), window 1440×900 with panels; engine viewport 1200×800
+dpr 1 unless noted. Each `render_frame` timed from the page with
+`window.__TAURI_INTERNALS__.invoke` (includes CPU raster + IPC transfer). The
+"before" column is the same protocol after the lag report (user: "It's lagging a
+ton") and before the session-21 fixes.
+
+| Operation | Before | After |
+|---|---|---|
+| `bootstrap` | 2.28 ms | 1.91 ms |
+| `engine_state` | 4.9–54 ms (first-run noise) | 2.11 ms |
+| Full render 1200×800 dpr 1 | 77.28 ms | **46.6 ms** |
+| Draft render 1200×800 (quality 0.4) | — | **6.4–8.8 ms** |
+| Full render dpr 2 | 337.23 ms | **137.1 ms** |
+| Draft render dpr 2 (quality 0.4) | — | **39.0 ms** |
+| Pointer move → engine | — | 2.58 ms |
+| Synthetic 90-step drag | ≈13 fps | **≈85 fps painted** (46 frames / 542 ms) |
+
+Session-21 fixes (all verified by the numbers above):
+
+1. **Clip-mask cache in the CPU rasterizer.** Every child of a clipping frame
+   used to allocate and fill a full-target `Mask` per item (300 hidden vector
+   nodes ⇒ 300 × full-window masks). Masks are now cached per distinct clip rect
+   for the whole frame, and clips covering the target skip masking entirely.
+2. **Scaled rendering (`RenderTarget::render_scaled`).** The renderer accepts a
+   quality scale (0.1–2.0), so gestures paint at 40 % resolution and the browser
+   upscales; full quality is drawn on interaction end. IPC `render_frame`
+   accepts numeric quality 0.25–1.0 (strings `draft`/`low` = 0.5).
+3. **Demultiplied IPC conversion.** Frames cross the IPC boundary through
+   tiny-skia's `take_demultiplied()` instead of a hand-written per-pixel loop.
+4. **UI commit/pointer coalescing.** Engine snapshots commit once per animation
+   frame and pointer/wheel flush on rAF; painting is skipped while the engine
+   viewport disagrees with the measured CSS size (that mismatch used to stretch
+   the frame canvas and made selection outlines look "wrong").
+
+Remaining, honest gaps: a full-quality frame at dpr 2 is still 137 ms (above the
+16 ms interaction target) and every interaction ends with one full-quality
+render; the GPU path and a tile/scene cache remain the next step, so this table
+does not claim 60 fps at full quality on retina displays.
+
 ## Reproducible protocol
 
 1. `git checkout <release commit>` and confirm a clean tree.

@@ -41,6 +41,8 @@ export class EnginePump {
   private pendingPointer: PointerInput | null = null;
   private pendingWheel: WheelInput | null = null;
   private flushScheduled = false;
+  private pendingState: EngineState | null = null;
+  private stateScheduled = false;
 
   constructor(transport: EngineTransport, onState: StateHandler, onError: ErrorHandler) {
     this.transport = transport;
@@ -63,7 +65,20 @@ export class EnginePump {
   }
 
   private apply = (state: EngineState): EngineState => {
-    this.onState(state);
+    // State updates drive a full React render (panels, layers, overlay) and a
+    // canvas frame. Coalesce them to one commit per animation frame: during a
+    // drag the engine can answer faster than the display refreshes, and
+    // committing every response made the whole editor lag.
+    this.pendingState = state;
+    if (!this.stateScheduled) {
+      this.stateScheduled = true;
+      requestAnimationFrame(() => {
+        this.stateScheduled = false;
+        const pending = this.pendingState;
+        this.pendingState = null;
+        if (pending) this.onState(pending);
+      });
+    }
     return state;
   };
 
@@ -90,7 +105,10 @@ export class EnginePump {
   private scheduleFlush(): void {
     if (this.flushScheduled) return;
     this.flushScheduled = true;
-    queueMicrotask(() => {
+    // One pointer/wheel call per display frame: high-polling-rate mice and
+    // trackpads otherwise flood the engine with more moves than it can answer
+    // inside a frame, which is perceived as lag.
+    requestAnimationFrame(() => {
       this.flushScheduled = false;
       this.flushPending();
     });

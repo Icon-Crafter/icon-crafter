@@ -479,16 +479,27 @@ fn command_snapshot(editor: &mut EditorState, outcome: CommandOutcome) -> Result
 #[tauri::command]
 pub fn render_frame(
     state: State<'_, IpcState>,
-    // The contract types `quality` as a number; accept strings too so older
-    // clients do not break. The CPU reference renderer currently renders at the
-    // viewport's device resolution for every tier (tiers land with the tile
-    // cache / GPU backend).
+    // The contract types `quality` as a number: a raster scale where 1.0 is
+    // full device resolution. Strings are accepted for older clients
+    // ("high" → 1.0, "draft"/"low" → 0.5). Draft frames render fewer pixels and
+    // are upscaled by the canvas while the user is dragging.
     quality: Option<Value>,
 ) -> Result<tauri::ipc::Response, IpcError> {
-    let _tier = match quality.as_ref() {
-        None | Some(Value::Null) => "high".to_owned(),
-        Some(Value::String(text)) => text.clone(),
-        Some(Value::Number(number)) => format!("level-{number}"),
+    let scale = match quality.as_ref() {
+        None | Some(Value::Null) => 1.0,
+        Some(Value::Number(number)) => number
+            .as_f64()
+            .ok_or_else(|| IpcError::validation("invalid render quality"))?
+            .clamp(0.25, 1.0),
+        Some(Value::String(text)) => match text.as_str() {
+            "high" => 1.0,
+            "draft" | "low" => 0.5,
+            other => {
+                return Err(IpcError::validation(format!(
+                    "invalid render quality '{other}'"
+                )));
+            }
+        },
         Some(other) => {
             return Err(IpcError::validation(format!(
                 "invalid render quality {other}"
@@ -496,7 +507,7 @@ pub fn render_frame(
         }
     };
     with_editor(&state, |editor| {
-        let frame = editor.render()?;
+        let frame = editor.render_scaled(scale)?;
         // The frame id travels with the state snapshot; the contract's
         // render_frame returns raw RGBA8 bytes (straight alpha).
         Ok(tauri::ipc::Response::new(frame.rgba))

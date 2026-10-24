@@ -83,10 +83,117 @@ export function LayersPanel() {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
   const [renameDraft, setRenameDraft] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; position: "before" | "after" | "inside" } | null>(null);
+  const dragState = useRef<{ id: string; startX: number; startY: number; active: boolean } | null>(null);
+  const dropTargetRef = useRef<{ id: string; position: "before" | "after" | "inside" } | null>(null);
 
   const nodes = summary?.nodes ?? EMPTY_NODES;
   const visible = useMemo(() => flattenVisibleNodes(nodes, collapsed, filter), [nodes, collapsed, filter]);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
+  const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+
+  const isContainerNode = useCallback(
+    (kind: NodeKind) =>
+      kind === "frame" ||
+      kind === "group" ||
+      kind === "component" ||
+      kind === "component_set" ||
+      kind === "instance",
+    [],
+  );
+
+  const isDescendantOf = useCallback(
+    (candidate: string, ancestor: string) => {
+      let current = nodeById.get(candidate);
+      let guard = 0;
+      while (current?.parent && guard < 256) {
+        if (current.parent === ancestor) return true;
+        current = nodeById.get(current.parent);
+        guard += 1;
+      }
+      return false;
+    },
+    [nodeById],
+  );
+
+  const commitDrop = useCallback(
+    (draggedId: string, drop: { id: string; position: "before" | "after" | "inside" }) => {
+      if (draggedId === drop.id || isDescendantOf(drop.id, draggedId)) return;
+      let parent: string | null = null;
+      let index = 0;
+      if (drop.position === "inside") {
+        parent = drop.id;
+        index = 0;
+      } else {
+        const target = nodeById.get(drop.id);
+        if (!target) return;
+        parent = target.parent ?? null;
+        let position = 0;
+        for (const candidate of nodes) {
+          if (candidate.id === draggedId) continue;
+          if (candidate.id === drop.id) break;
+          if (candidate.parent === parent) position += 1;
+        }
+        index = drop.position === "after" ? position + 1 : position;
+      }
+      void runCommand("reorder", { node_id: draggedId, new_parent_id: parent, index });
+    },
+    [nodes, nodeById, isDescendantOf],
+  );
+
+  // Pointer-based drag & drop: drag a layer row onto a container to become its
+  // child, or between siblings to reorder (Figma-style layer reparenting).
+  useEffect(() => {
+    const onMove = (event: PointerEvent) => {
+      const drag = dragState.current;
+      if (!drag) return;
+      if (!drag.active) {
+        if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 5) return;
+        drag.active = true;
+        setDragId(drag.id);
+      }
+      const element = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+      const row = element?.closest<HTMLElement>("[data-layer-id]");
+      const id = row?.dataset.layerId;
+      let next: { id: string; position: "before" | "after" | "inside" } | null = null;
+      if (row && id && id !== drag.id && !isDescendantOf(id, drag.id)) {
+        const target = nodeById.get(id);
+        const rect = row.getBoundingClientRect();
+        const ratio = (event.clientY - rect.top) / Math.max(1, rect.height);
+        if (target && isContainerNode(target.kind) && (target.child_count === 0 || (ratio > 0.3 && ratio < 0.7))) {
+          next = { id, position: "inside" };
+        } else {
+          next = { id, position: ratio < 0.5 ? "before" : "after" };
+        }
+      }
+      dropTargetRef.current = next;
+      setDropTarget(next);
+    };
+    const onUp = () => {
+      const drag = dragState.current;
+      dragState.current = null;
+      const drop = dropTargetRef.current;
+      dropTargetRef.current = null;
+      setDragId(null);
+      setDropTarget(null);
+      if (drag?.active && drop) commitDrop(drag.id, drop);
+    };
+    const onCancel = () => {
+      dragState.current = null;
+      dropTargetRef.current = null;
+      setDragId(null);
+      setDropTarget(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    };
+  }, [commitDrop, isContainerNode, isDescendantOf, nodeById]);
 
   useEffect(() => {
     if (renamingNodeId) {
@@ -223,6 +330,8 @@ export function LayersPanel() {
                 data-layer-id={node.id}
                 className={`layer-row${selected ? " layer-row--selected" : ""}${isHovered ? " layer-row--hovered" : ""}${
                   !node.visible ? " layer-row--dim" : ""
+                }${dragId === node.id ? " layer-row--dragging" : ""}${
+                  dropTarget?.id === node.id ? ` layer-row--drop-${dropTarget.position}` : ""
                 }`}
                 style={{ paddingLeft: 4 + node.depth * ROW_INDENT }}
                 role="treeitem"
@@ -230,6 +339,15 @@ export function LayersPanel() {
                 aria-expanded={hasChildren ? !isCollapsed : undefined}
                 aria-level={node.depth + 1}
                 tabIndex={selected ? 0 : -1}
+                onPointerDown={(event) => {
+                  if (event.button !== 0 || renamingNodeId === node.id) return;
+                  dragState.current = {
+                    id: node.id,
+                    startX: event.clientX,
+                    startY: event.clientY,
+                    active: false,
+                  };
+                }}
                 onPointerEnter={() => setHoveredNodeId(node.id)}
                 onPointerLeave={() => setHoveredNodeId(null)}
                 onClick={(event) => selectNode(node, event.shiftKey || event.metaKey || event.ctrlKey)}
