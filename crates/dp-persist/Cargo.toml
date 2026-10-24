@@ -15,7 +15,7 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 indexmap = { workspace = true }
 chrono = { version = "0.4.45", features = ["serde"] }
-rusqlite = { version = "0.37.0", features = ["bundled"] }
+rusqlite = { version = "0.39.0", features = ["bundled"] }
 zip = "9.0.5"
 flate2 = "1.1.10"
 
