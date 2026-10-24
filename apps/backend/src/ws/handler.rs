@@ -485,8 +485,12 @@ mod tests {
 
     #[test]
     fn heartbeat_and_queue_bounds_are_sane() {
-        assert!(HEARTBEAT_INTERVAL >= Duration::from_secs(5));
-        assert!(HEARTBEAT_INTERVAL <= Duration::from_secs(120));
-        assert!(OUTBOUND_CAPACITY >= 16);
+        // Constants are compared through runtime values so the checks stay
+        // meaningful if the constants ever stop being literal.
+        let interval = HEARTBEAT_INTERVAL;
+        let capacity = OUTBOUND_CAPACITY;
+        assert!(interval >= Duration::from_secs(5));
+        assert!(interval <= Duration::from_secs(120));
+        assert!(capacity >= 16);
     }
 }
