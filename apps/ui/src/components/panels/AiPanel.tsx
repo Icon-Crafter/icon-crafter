@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { AiTextTask, SnapshotAiPreview } from "../../engine/contract";
+import { aiSourceLabel, aiStepsLabel, assistantAvailability } from "../../engine/assistant";
 import { useAppStore, useCapabilities } from "../../engine/store";
 import {
   aiApplyLast,
@@ -32,9 +33,11 @@ const TEXT_TASKS: { value: AiTextTask; label: string }[] = [
 ];
 
 function SourceLabel({ preview }: { preview: SnapshotAiPreview }) {
-  const label =
-    preview.source === "offline" ? en.ai.sourceOffline : preview.source === "remote" ? en.ai.sourceRemote : preview.source;
-  return <span className="ai-source">{en.ai.previewSource.replace("{source}", label)}</span>;
+  return (
+    <span className="ai-source">
+      {en.ai.previewSource.replace("{source}", aiSourceLabel(preview.source))}
+    </span>
+  );
 }
 
 export function AiPanel() {
@@ -54,17 +57,15 @@ export function AiPanel() {
   const [taskInput, setTaskInput] = useState("");
   const [taskResult, setTaskResult] = useState<string | null>(null);
 
-  const enabled = capabilities.ai === true && status === "ready" && doc !== null;
+  const availability = assistantAvailability(capabilities, status, doc !== null);
+  const enabled = availability === "ready";
   const text = selectedText?.characters ?? "";
 
   useEffect(() => {
     if (text !== "" && taskInput.trim() === "") setTaskInput(text);
   }, [text, taskInput]);
 
-  const stepsLabel = useMemo(() => {
-    if (!preview) return "";
-    return preview.steps === 1 ? en.ai.stepsOne : en.ai.steps.replace("{count}", String(preview.steps));
-  }, [preview]);
+  const stepsLabel = useMemo(() => (preview ? aiStepsLabel(preview) : ""), [preview]);
 
   const runGenerate = async () => {
     setBusy("generate");
@@ -134,7 +135,7 @@ export function AiPanel() {
           <div className="side-empty">
             <p className="side-empty-title">{en.ai.disabledTitle}</p>
             <p className="side-empty-body">
-              {capabilities.ai !== true ? en.ai.disabledHint : en.ai.notConnected}
+              {availability === "disabled" ? en.ai.disabledHint : en.ai.notConnected}
             </p>
           </div>
         ) : (

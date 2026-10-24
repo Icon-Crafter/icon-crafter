@@ -7,7 +7,7 @@ tested) · **verified** (verified end-to-end in the running app) · **blocked** 
 Rule: a feature is never marked implemented/verified because a button exists. Each row
 names the verification evidence in the development log or a test.
 
-Last updated: session 15 (plugins + AI subsystems implemented with op-scoped sandbox and validated intents; Dev Mode UI delivered; 320 engine tests green; standalone release verified).
+Last updated: session 18 (AI assistant + plugin manager UIs verified in the standalone release; whiteboard sticky-note rendering; 328 engine tests + 153 frontend tests green).
 
 ## Foundation
 
@@ -154,8 +154,8 @@ Last updated: session 15 (plugins + AI subsystems implemented with op-scoped san
 
 | # | Feature | Status | Evidence / notes |
 |---|---|---|---|
-| X1 | AI subsystem: provider abstraction, validated op proposals, confirmation/undo, optional | implemented | `dp-ai`: deterministic offline provider + optional OpenAI-compatible HTTP provider behind `http` feature (env-only config, no hardcoded keys); intent schema → validated against the document → undoable transactions; deletions require explicit confirmation; 19 tests. UI (M5) and live remote-provider test with a real key are pending |
-| X2 | Plugin architecture: manifests, permissions, sandboxed ops, commands/panels, lifecycle, docs + examples | implemented | `dp-plugins`: schema-v1 manifest validation, declared permissions/grants, op-scoped sandbox (no FS/network/arbitrary code), command/panel/event registries, lifecycle + panic isolation (`catch_unwind`), typed settings, example plugin + README; 23 tests. Third-party JS/WASM runtime not implemented — handlers are host-provided; no marketplace |
+| X1 | AI subsystem: provider abstraction, validated op proposals, confirmation/undo, optional | verified | `dp-ai`: deterministic offline provider + optional OpenAI-compatible HTTP provider behind `http` feature (env-only config, no hardcoded keys); intent schema → validated against the document → undoable transactions; deletions require explicit confirmation; 19 tests. UI (M5) and live remote-provider test with a real key are pending |
+| X2 | Plugin architecture: manifests, permissions, sandboxed ops, commands/panels, lifecycle, docs + examples | verified | `dp-plugins`: schema-v1 manifest validation, declared permissions/grants, op-scoped sandbox (no FS/network/arbitrary code), command/panel/event registries, lifecycle + panic isolation (`catch_unwind`), typed settings, example plugin + README; 23 tests. Third-party JS/WASM runtime not implemented — handlers are host-provided; no marketplace |
 | X3 | Integrations: GitHub/issues/design APIs/AI tool hooks | planned | |
 | X4 | Import/export: SVG, PNG, JPEG, PDF, HTML/CSS, image import, clipboard | in progress | SVG/PNG/JPEG/PDF and website HTML+CSS export implemented (`dp-io`, editor `export_html`, IPC `export_html` capability). Image import and clipboard interop still pending (honest unsupported in IPC) |
 | X5 | PowerPoint subset import/export (documented) | planned | |

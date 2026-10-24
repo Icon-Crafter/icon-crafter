@@ -358,3 +358,39 @@ fn drop_shadows_are_rasterized_behind_shapes() {
     let untouched = target.pixel_straight(5, 5).expect("corner pixel");
     assert_eq!(untouched[3], 0);
 }
+
+#[test]
+fn sticky_note_renders_background_and_editable_text() {
+    let (mut document, page) = doc_and_page();
+    let mut note = Node::new(
+        NodeKind::Sticky,
+        "Note",
+        Transform::new(20.0, 20.0, 180.0, 110.0),
+    );
+    note.style = NodeStyle::filled(Color::from_hex("#f2b84b").unwrap());
+    let mut content = dp_model::TextContent::plain("Idea");
+    content.style.fills = vec![Fill::solid(Color::from_hex("#1f2430").unwrap())];
+    note.text = Some(content);
+    add(&mut document, page, note, None);
+
+    let target = render(&document, page, &viewport(240.0, 180.0));
+    // Background pixel near the bottom-right corner of the note (away from text).
+    let corner = target.pixel_straight(190, 120).expect("pixel in target");
+    assert!(corner[3] > 200, "sticky background must be opaque: {corner:?}");
+    assert!(
+        corner[0] > 200 && corner[1] > 140 && corner[2] < 140,
+        "sticky background must be the note colour: {corner:?}"
+    );
+    // Dark text pixels must exist inside the note.
+    let mut dark = 0u32;
+    for y in 20..130 {
+        for x in 20..200 {
+            if let Some(px) = target.pixel_straight(x, y) {
+                if px[3] > 128 && px[0] < 90 && px[1] < 90 && px[2] < 110 {
+                    dark += 1;
+                }
+            }
+        }
+    }
+    assert!(dark > 10, "expected dark text pixels, found {dark}");
+}

@@ -447,3 +447,28 @@ HTML/CSS part of §18, without pretending it is a production site generator.
   transport (desktop↔server WS), backend integration verification (needs Docker/PostgreSQL),
   AI/plugin UI delivery (frontend milestone 5 in flight), packaging installers and the
   accessibility/performance follow-ups in docs/FEATURE-CHECKLIST.md.
+
+## Session 18 (2026-10-24) — milestone-5 UI verified natively + sticky notes
+
+- Frontend milestone 5 delivered (AI assistant + plugin manager panels, 153 tests,
+  clean typecheck/build: JS 495.77 kB, CSS 66.17 kB); Lead re-ran `pnpm typecheck`,
+  `pnpm test` (153/153) and `pnpm build` before accepting it.
+- Standalone release rebuilt with `cargo build -p iconcrafter-desktop --release
+  --features custom-protocol` and verified through WebView2 CDP against
+  `http://tauri.localhost/`: `bootstrap.capabilities` reports `ai: true`,
+  `plugins: true`, `export_html: true`; real offline AI proposal
+  (`ai_generate_layout` → 7 steps for a login screen) applied as one undoable
+  transaction (revision 1 → 8, seven named layers); plugin example installed via
+  `plugin_install_example` with manifest/permissions/settings exposed. UI flows
+  driven with real clicks/typing: AI panel generate proposal → pending proposal
+  card with Apply/Discard; plugin manager shows the installed example with
+  DISABLED state, Enable/Settings/Remove. Screenshots committed under
+  `docs/assets/ai-panel-native.png` and `docs/assets/plugins-panel-native.png`.
+- Whiteboard sticky notes now render in the CPU reference renderer (rounded box +
+  editable text); integration test `sticky_note_renders_background_and_editable_text`.
+- Verification: `cargo test -p dp-render` 21 tests; full engine suite 328 test
+  results green (0 failed); strict clippy gate on 13 crates clean; backend 132
+  unit tests still green; desktop check clean.
+- Remaining honest gaps (unchanged): image import/assets, collaboration transport
+  wiring to the Axum WS relay, whiteboard/slides/drawing/website UI workspaces,
+  connectors/tables, Docker-based backend integration verification, installers.

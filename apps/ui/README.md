@@ -51,14 +51,18 @@ src/
     overlayGeometry.ts  pure screen-space helpers for the overlay canvas and widgets
     prototype.ts     pure prototype authoring/presentation helpers (triggers, actions, hotspots)
     designSystem.ts  pure style/variable helpers (style kind detection, value parsing/formatting)
+    assistant.ts     pure AI proposal helpers (preview lines, quick-action statuses)
+    pluginManifest.ts pure plugin manager helpers (manifest parsing/validation, setting formatting)
     devMode.ts       Dev Mode pure model: revision captures, measurement text, diff labels
     devModeStore.ts  Dev Mode panel state (inspect/code/handoff/captures) via dev_* IPC
   components/
-    Toolbar, LeftPanel, RightSidebar (Inspector or Dev panel), CanvasStage, StatusBar, App shell
+    Toolbar, LeftPanel, RightSidebar (Inspector, Dev panel, AI assistant or Plugins), CanvasStage, StatusBar, App shell
     Presentation.tsx full-window prototype player (frame canvas + hotspot overlay)
     panels/          Layers, Pages, Assets (styles), Components, Variables
     inspector/       Transform/Layout/Fill/Stroke/Effects/Typography/Component/Styles/Prototype/Export
     dev/             Dev Mode panel: Inspect, Code, Annotate, Compare tabs
+    AssistantPanel.tsx context-aware AI assistant panel (proposal review, quick actions)
+    PluginsPanel.tsx   plugin manager (install manifest/example, permissions, settings, enable/remove)
     primitives/      IconButton, Button, menus, number/color/segmented fields, Dialog
     CommandPalette, ContextMenus, Dialogs, Toasts, ConfirmDialog
   icons/             lucide-react re-exports + editor-specific custom SVG glyphs
@@ -149,6 +153,33 @@ Honest limitations:
 - The browser harness reproduces styles, components, variables (with two modes), prototype
   interactions and presentation, so the whole flow is explorable without Rust.
 
+### AI assistant and plugin manager
+
+Both surfaces live in the right sidebar (toggle them from the toolbar icons next to Dev
+Mode) and every action goes through the engine — there is no client-side simulation
+pretending to be AI.
+
+| Surface | What it does | Engine calls |
+| --- | --- | --- |
+| AI assistant | Generates a **reviewable proposal** from a layout prompt: the preview lists every step ("Create frame", "Add heading", …) with the step count and source label, and nothing is applied until **Apply proposal** (one undoable transaction). **Discard** clears it. The selected-layer context is shown (name, type, text) so prompts can be target-aware. Quick actions operate on the selected text layer's prose (`Rename layers`, `Text tasks`, `Improve writing`, `Explain`, `Draft content`, `Suggest style`, `Write comments`, `Run task`) and show the assistant's reply in the result block plus the engine status line. Rejections from the validator render as inline errors. | `ai_generate_layout {prompt}`, `ai_apply_last {confirmed}`, `ai_discard_last`, `ai_rename_layers`, `ai_text_task {task}`, `ai_explain`, `ai_draft {kind}` |
+| Plugins | Paste a JSON plugin manifest or install the bundled example. Cards show name/version, description, enabled state and inline validation errors from the engine (manifest rejection messages are surfaced verbatim). `Enable`/`Disable`, `Settings` (declarative settings: string, number, boolean, select, with save-on-enter / toggle), and `Remove` with a confirmation dialog that names the plugin. | `plugin_install {manifest}`, `plugin_install_example`, `plugin_remove {plugin_id}`, `plugin_set_enabled {plugin_id, enabled}`, `plugin_set_setting {plugin_id, key, value}` |
+
+Honest limitations:
+
+- Both panels are capability-gated (`capabilities.ai` / `capabilities.plugins`). When the
+  flag is false the toolbar button and panel are disabled and explain why in a tooltip,
+  instead of faking a worker. The current Rust build reports `plugins: true` and
+  `ai: false` by default; the browser harness enables both with a deterministic offline
+  provider so the UI is reviewable end-to-end.
+- The browser harness AI provider is explicitly labelled "Local assistant (offline)" and
+  produces a fixed deterministic proposal with warnings; it is not claimed to be a model.
+- Plugin code is never executed by the UI; the manager only edits manifest metadata and
+  settings through the engine. Only install plugins you trust — plugins run inside the
+  local engine process.
+- A rejected manifest stays in the textarea so it can be corrected; the embedded engine
+  error is shown inline (and the success toast only fires when the call actually
+  succeeded).
+
 ### Not implemented / honest placeholders
 
 - Share is intentionally not built; the control explains this in a toast rather than
@@ -175,7 +206,9 @@ The UI reads `bootstrap.capabilities` and disables actions it cannot honour:
 | `import_image`    | Place image menu row and command                       |
 | `prototype`       | Present button, prototype commands and presentation layer  |
 | `canvas_text_edit`| on-canvas DOM text editor                              |
-| `dev_mode`        | dev-only badges/notes                                  |
+| `dev_mode`        | Dev Mode toggle and panel                              |
+| `ai`              | AI assistant toolbar button and panel                  |
+| `plugins`         | plugin manager toolbar button and panel                |
 
 Earlier bridge gaps are resolved and the workarounds were removed: `render_frame` accepts
 a numeric `quality`; `set_preference` returns the updated preferences; exporters honour
@@ -184,14 +217,15 @@ capability flags above replace the previous "try and toast" behaviour where poss
 
 ## Verification
 
-- `pnpm test` — 138 unit tests: store reducers (editor + Dev Mode), shortcut
+- `pnpm test` — 153 unit tests: store reducers (editor + Dev Mode), shortcut
   resolver/persistence, palette fuzzy filtering and grouping, overlay geometry,
   color/number formatting, layer-tree flattening/search, Dev Mode measurement
   formatting, diff direction/counts, capture persistence and dedupe, prototype
   interaction payloads/labels/hotspot hit-testing, style-kind detection and variable
-  value parsing/formatting.
-- `pnpm build` — strict type-check + production bundle; current output: 469.47 kB JS
-  (135.26 kB gzip), 59.21 kB CSS (9.78 kB gzip), 1.05 kB dynamic plugin-fs chunk,
+  value parsing/formatting, AI proposal preview/quick-action helpers, plugin manifest
+  parsing/validation and settings formatting.
+- `pnpm build` — strict type-check + production bundle; current output: 495.77 kB JS
+  (141.29 kB gzip), 66.17 kB CSS (10.54 kB gzip), 1.05 kB dynamic plugin-fs chunk,
   0.61 kB HTML, no build warnings. The dev harness is excluded from the production
   bundle (verified: no `devTransport` / `iconcrafter.dev.files` strings in `dist/`).
 

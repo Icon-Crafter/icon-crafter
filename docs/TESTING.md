@@ -330,3 +330,28 @@ Release desktop build (verified earlier in session 13):
 cargo build -p iconcrafter-desktop --release --features custom-protocol
 # target/release/iconcrafter-desktop.exe loads the embedded UI (tauri.localhost)
 ```
+
+## Session 18 verification — milestone-5 UI (native) + sticky notes
+
+Standalone release build and native IPC checks:
+
+```powershell
+cargo build -p iconcrafter-desktop --release --features custom-protocol
+# launch target\release\iconcrafter-desktop.exe with
+# WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9226
+# then from DevTools/CDP (http://tauri.localhost/):
+#   bootstrap.capabilities.ai === true, .plugins === true
+#   ai_generate_layout({prompt:"login screen…",width:390,height:844}) → ai_preview.steps == 7
+#   ai_apply_last({confirmed:false}) → revision increases, summary has the new layers
+#   plugin_install_example({}) → plugins[0].id == "hello-icon-crafter"
+```
+
+UI checks performed with real pointer/keyboard events in the release window: AI
+panel opens, prompt typed, "Generate proposal" produces the pending-proposal card
+(offline label, 5 steps), Apply/Discard present; plugin panel lists the installed
+example with Enable/Settings/Remove and capability-gated entry points. Evidence:
+`docs/assets/ai-panel-native.png`, `docs/assets/plugins-panel-native.png`.
+
+Rust: `cargo test -p dp-render --no-default-features` → 21 passed (new sticky
+note render test). Full engine suite: **328 test results, 0 failed**; frontend
+`pnpm test` 153/153; backend `cargo test -p iconcrafter-server --lib` 132 passed.

@@ -833,6 +833,11 @@ export async function setActiveVariableMode(collectionId: string, modeId: string
 // AI assistant
 // ---------------------------------------------------------------------------
 
+/** True only when an engine call completed without a thrown or embedded error. */
+function callSucceeded(result: EngineCallResult): boolean {
+  return result.state !== null && result.error === null && result.state.errors.length === 0;
+}
+
 /** Runs an engine call and reports thrown errors as toasts; also returns the message. */
 async function runGuarded(run: (pump: ActivePump) => Promise<EngineState>): Promise<EngineCallResult> {
   const pump = getActivePump();
@@ -887,21 +892,21 @@ export async function aiGenerateLayout(
 export async function aiApplyLast(confirmed = false): Promise<EngineCallResult> {
   if (!aiCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
   const result = await runGuarded((pump) => pump.aiApplyLast({ confirmed }));
-  if (result.state && result.error === null) toastInfo(en.toasts.aiApplied);
+  if (callSucceeded(result)) toastInfo(en.toasts.aiApplied);
   return result;
 }
 
 export async function aiDiscardLast(): Promise<EngineCallResult> {
   if (!aiCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
   const result = await runGuarded((pump) => pump.aiDiscardLast());
-  if (result.state && result.error === null) toastInfo(en.toasts.aiDiscarded);
+  if (callSucceeded(result)) toastInfo(en.toasts.aiDiscarded);
   return result;
 }
 
 export async function aiRenameLayers(): Promise<EngineCallResult> {
   if (!aiCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
   const result = await runGuarded((pump) => pump.aiRenameLayers());
-  if (result.state && result.error === null) toastInfo(en.toasts.aiRenamed);
+  if (callSucceeded(result)) toastInfo(en.toasts.aiRenamed);
   return result;
 }
 
@@ -928,28 +933,28 @@ export function togglePluginsPanel(): void {
 export async function pluginInstall(manifest: Record<string, unknown> | string): Promise<EngineCallResult> {
   if (!pluginCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
   const result = await runGuarded((pump) => pump.pluginInstall({ manifest }));
-  if (result.state && result.error === null) toastInfo(en.toasts.pluginInstalled);
+  if (callSucceeded(result)) toastInfo(en.toasts.pluginInstalled);
   return result;
 }
 
 export async function pluginInstallExample(): Promise<EngineCallResult> {
   if (!pluginCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
   const result = await runGuarded((pump) => pump.pluginInstallExample());
-  if (result.state && result.error === null) toastInfo(en.toasts.pluginInstalled);
+  if (callSucceeded(result)) toastInfo(en.toasts.pluginInstalled);
   return result;
 }
 
 export async function pluginRemove(pluginId: string): Promise<EngineCallResult> {
   if (!pluginCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
   const result = await runGuarded((pump) => pump.pluginRemove(pluginId));
-  if (result.state && result.error === null) toastInfo(en.toasts.pluginRemoved);
+  if (callSucceeded(result)) toastInfo(en.toasts.pluginRemoved);
   return result;
 }
 
 export async function pluginSetEnabled(pluginId: string, enabled: boolean): Promise<EngineCallResult> {
   if (!pluginCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
   const result = await runGuarded((pump) => pump.pluginSetEnabled(pluginId, enabled));
-  if (result.state && result.error === null) {
+  if (callSucceeded(result)) {
     toastInfo(enabled ? en.toasts.pluginEnabled : en.toasts.pluginDisabled);
   }
   return result;
@@ -961,7 +966,9 @@ export async function pluginSetSetting(
   value: unknown,
 ): Promise<EngineCallResult> {
   if (!pluginCapabilityGate()) return { state: null, error: en.toasts.capabilityUnavailable };
-  return runGuarded((pump) => pump.pluginSetSetting(pluginId, key, value));
+  const result = await runGuarded((pump) => pump.pluginSetSetting(pluginId, key, value));
+  if (callSucceeded(result)) toastInfo(en.toasts.pluginSettingSaved);
+  return result;
 }
 
 /** Removes a plugin after a confirmation dialog. */

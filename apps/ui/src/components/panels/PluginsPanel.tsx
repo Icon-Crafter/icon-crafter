@@ -8,6 +8,12 @@
 import { useState } from "react";
 
 import type { SnapshotPlugin } from "../../engine/contract";
+import { parseSettingInput, pluginAvailability } from "../../engine/assistant";
+import {
+  manifestEntryCount,
+  manifestStringList,
+  parsePluginManifest,
+} from "../../engine/pluginManifest";
 import { useAppStore, useCapabilities } from "../../engine/store";
 import {
   confirmRemovePlugin,
@@ -21,16 +27,6 @@ import { en } from "../../i18n/en";
 import { Download, Puzzle, Trash2, X } from "../../icons";
 import { Button } from "../primitives/IconButton";
 import { NumberInput } from "../primitives/Fields";
-
-function stringList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((entry) => (typeof entry === "string" ? entry : JSON.stringify(entry)));
-}
-
-function manifestString(manifest: Record<string, unknown>, key: string): string | null {
-  const value = manifest[key];
-  return typeof value === "string" ? value : null;
-}
 
 function SettingEditor({
   plugin,
@@ -90,7 +86,7 @@ function SettingEditor({
           onKeyDown={(event) => {
             if (event.key !== "Enter") return;
             event.preventDefault();
-            onSave(settingKey, event.currentTarget.value);
+            onSave(settingKey, parseSettingInput(event.currentTarget.value, value));
           }}
         />
         <Button
@@ -99,7 +95,7 @@ function SettingEditor({
             const input = event.currentTarget
               .closest(".plugin-setting-row")
               ?.querySelector<HTMLInputElement>("input");
-            if (input) onSave(settingKey, input.value);
+            if (input) onSave(settingKey, parseSettingInput(input.value, value));
           }}
         >
           {en.plugins.saveSetting}
@@ -112,17 +108,21 @@ function SettingEditor({
 function PluginRow({ plugin }: { plugin: SnapshotPlugin }) {
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [settingError, setSettingError] = useState<string | null>(null);
   const settings = plugin.settings ?? {};
-  const permissions = stringList(plugin.manifest.permissions);
-  const commands = Array.isArray(plugin.manifest.commands) ? plugin.manifest.commands.length : 0;
-  const panels = Array.isArray(plugin.manifest.panels) ? plugin.manifest.panels.length : 0;
-  const description = plugin.description || manifestString(plugin.manifest, "description") || en.plugins.noDescription;
+  const permissions = manifestStringList(plugin.manifest, "permissions");
+  const commands = manifestEntryCount(plugin.manifest, "commands");
+  const panels = manifestEntryCount(plugin.manifest, "panels");
+  const description = plugin.description || en.plugins.noDescription;
   const enabled = plugin.enabled && plugin.state === "enabled";
 
   const saveSetting = async (key: string, value: unknown) => {
     setBusy(true);
-    await pluginSetSetting(plugin.id, key, value);
+    setSettingError(null);
+    const result = await pluginSetSetting(plugin.id, key, value);
     setBusy(false);
+    const rejected = result.error ?? result.state?.errors[0]?.message ?? null;
+    setSettingError(rejected ? `${en.plugins.invalidSetting} ${rejected}` : null);
   };
 
   return (
@@ -215,6 +215,11 @@ function PluginRow({ plugin }: { plugin: SnapshotPlugin }) {
             ) : (
               <p className="side-hint">{en.plugins.noSettings}</p>
             )}
+            {settingError ? (
+              <p className="form-error" role="alert">
+                {settingError}
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -231,26 +236,27 @@ export function PluginsPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const enabled = capabilities.plugins === true && status === "ready" && doc !== null;
+  const availability = pluginAvailability(capabilities, status, doc !== null);
+  const enabled = availability === "ready";
 
   const installManifest = async () => {
     setError(null);
-    if (manifestText.trim() === "") {
+    const parsed = parsePluginManifest(manifestText);
+    if (parsed.error === "empty") {
       setError(en.plugins.manifestRequired);
       return;
     }
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(manifestText) as Record<string, unknown>;
-    } catch (parseError) {
-      setError(`${en.plugins.validationTitle}: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+    if (!parsed.manifest) {
+      setError(`${en.plugins.validationTitle}: ${parsed.error ?? ""}`);
       return;
     }
     setBusy(true);
-    const result = await pluginInstall(parsed);
+    const result = await pluginInstall(parsed.manifest);
     setBusy(false);
     if (result.error) setError(`${en.plugins.installFailed} ${result.error}`);
-    if (result.state) setManifestText("");
+    const rejected = result.state?.errors[0]?.message;
+    if (rejected) setError(`${en.plugins.validationTitle}: ${rejected}`);
+    if (result.state && !rejected) setManifestText("");
   };
 
   const installExample = async () => {
@@ -259,6 +265,8 @@ export function PluginsPanel() {
     const result = await pluginInstallExample();
     setBusy(false);
     if (result.error) setError(`${en.plugins.installFailed} ${result.error}`);
+    const rejected = result.state?.errors[0]?.message;
+    if (rejected) setError(`${en.plugins.validationTitle}: ${rejected}`);
   };
 
   return (
@@ -287,7 +295,7 @@ export function PluginsPanel() {
           <div className="side-empty">
             <p className="side-empty-title">{en.plugins.disabledTitle}</p>
             <p className="side-empty-body">
-              {capabilities.plugins !== true ? en.plugins.disabledHint : en.plugins.notConnected}
+              {availability === "disabled" ? en.plugins.disabledHint : en.plugins.notConnected}
             </p>
           </div>
         ) : (

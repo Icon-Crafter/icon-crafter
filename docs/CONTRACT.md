@@ -1,4 +1,4 @@
-# Editor ⇄ engine contract (Tauri IPC)
+﻿# Editor ⇄ engine contract (Tauri IPC)
 
 The React UI is a **presentation layer**. This document is the canonical contract between
 `apps/ui` (TypeScript) and the Rust engine (`apps/desktop`). Both sides must implement this
@@ -552,3 +552,20 @@ Honest limitations (also emitted as engine warnings when they apply): fixed-pixe
 exported yet), boolean/line geometry becomes boxes, gradients/blend modes are approximated,
 inner shadows and blurs are omitted. The export dialog/panel arrives with the frontend
 milestone that follows; until then the command is verified through engine tests and IPC.
+
+
+## 16. Milestone-5 UI and sticky notes (session 18)
+
+The AI assistant and plugin manager panels are now part of the desktop UI and were
+verified in the standalone release (`--features custom-protocol`): both toolbar
+buttons are enabled because `bootstrap.capabilities` reports `ai: true` and
+`plugins: true`; the AI panel generates a real offline proposal (source label
+"Local assistant (offline)"), shows the numbered steps with Apply/Discard and
+applies as one undoable transaction; the plugin manager installs the bundled
+example, shows permissions/state, and edits typed settings. Evidence screenshots:
+`docs/assets/ai-panel-native.png`, `docs/assets/plugins-panel-native.png`.
+
+The CPU reference renderer now renders whiteboard **sticky notes** (rounded box
+from node style + editable text through the text engine). Connectors still
+render as wireframe-only placeholders; whiteboard tables/freehand-tool UI are
+not implemented yet — the checklist records them as planned.

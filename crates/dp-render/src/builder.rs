@@ -346,10 +346,7 @@ impl Builder<'_> {
         let size = Size::new(local.w.max(0.0), local.h.max(0.0));
 
         // Wireframe nodes are not rendered but are kept out of the display list.
-        if matches!(
-            kind,
-            NodeKind::Slice | NodeKind::Sticky | NodeKind::Connector
-        ) {
+        if matches!(kind, NodeKind::Slice | NodeKind::Connector) {
             return None;
         }
 
@@ -424,6 +421,19 @@ impl Builder<'_> {
                 fills = self.resolve_fills(&node.style, opacity, size);
                 strokes = self.resolve_strokes(&node.style, size);
             }
+            NodeKind::Sticky => {
+                // Whiteboard sticky notes: rounded box (rounded corners are
+                // applied by the rasterizer from the style) with editable text.
+                shape = SceneShape::Path(Arc::new(rectangle_path(node)));
+                if let Some(content) = &node.text {
+                    let layout = self.layout_text(content, node);
+                    let color = self.text_color(content, size);
+                    text_payload = layout.map(|layout| SceneText {
+                        layout: Arc::new(layout),
+                        color,
+                    });
+                }
+            }
             NodeKind::Boolean => match self.boolean_path(node) {
                 Some(path) => shape = SceneShape::Path(Arc::new(path)),
                 None => self.list.warn(
@@ -451,6 +461,7 @@ impl Builder<'_> {
                 | NodeKind::Star
                 | NodeKind::Vector
                 | NodeKind::Boolean
+                | NodeKind::Sticky
         ) {
             fills = self.resolve_fills(&node.style, opacity, size);
             strokes = self.resolve_strokes(&node.style, size);

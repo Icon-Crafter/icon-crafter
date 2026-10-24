@@ -117,6 +117,14 @@ export function buildActionItems(
     keywords: ["image", "import", "photo", "bitmap"],
     disabled: capabilities.import_image !== true,
   });
+  push("ai-assistant", en.toolbar.ai, () => void lazyCommands().then((m) => m.toggleAiPanel()), {
+    keywords: ["ai", "assistant", "generate", "layout", "proposal"],
+    disabled: capabilities.ai !== true || !engine.doc,
+  });
+  push("plugins", en.toolbar.plugins, () => void lazyCommands().then((m) => m.togglePluginsPanel()), {
+    keywords: ["plugin", "extension", "install", "manifest"],
+    disabled: capabilities.plugins !== true || !engine.doc,
+  });
 
   push("undo", en.menu.undo, commandRunner("undo"), {
     shortcutId: "edit.undo",
