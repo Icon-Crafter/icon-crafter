@@ -78,7 +78,7 @@ jobs:
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "version=$($tag.TrimStart('v'))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.tag.outputs.tag }}
           fetch-depth: 0
@@ -98,7 +98,7 @@ jobs:
         run: cargo install tauri-cli --version "^2.12" --locked
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -168,7 +168,7 @@ jobs:
           "@ | Add-Content -Path release/NOTES.md -Encoding utf8
 
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: iconcrafter-${{ steps.tag.outputs.version }}-windows
           path: release/*
